@@ -11,15 +11,21 @@ module.exports = function(utils){
       var w = utils.workers.one;
       redka.enqueue('one', 'error', 1);
       w.once('failed', function(){
-        w.stats.failed.should.equal(1);
-        done();
+        redka.status(function(err, results){
+          should.not.exist(err);
+          results.one.failed.should.equal(1);
+          done();
+        });
       });
     });
     it('should complete successful jobs', function(done){
       var w = utils.workers.one;
       w.once('complete', function(){
-        w.stats.complete.should.equal(1);
-        done();
+        redka.status(function(err, results){
+          should.not.exist(err);
+          results.one.complete.should.equal(1);
+          done();
+        });
       });
       redka.enqueue('one', 'echo', 1);
     });
