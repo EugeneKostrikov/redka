@@ -14,20 +14,10 @@ module.exports = function(utils){
       redka.status(function(err, results){
         should.not.exist(err);
         results.should.be.an.Object;
-        results.one.progress.should.equal(1);
-        results.two.progress.should.equal(1);
-        results.source.progress.should.equal(1);
-      });
-      utils.workers.one.on('complete', function(job){
-        if (job.params !== 'last') return;
-        redka.status(function(err, results){
-          should.not.exist(err);
-          results.one.complete.should.equal(2);
-          results.two.complete.should.equal(1);
-          results.two.failed.should.equal(1);
-          results.source.complete.should.equal(1);
-          done();
-        });
+        results.one.should.have.keys(['pending', 'progress', 'failed', 'complete']);
+        results.two.should.have.keys(['pending', 'progress', 'failed', 'complete']);
+        results.source.should.have.keys(['pending', 'progress', 'failed', 'complete']);
+        done();
       });
     });
   });

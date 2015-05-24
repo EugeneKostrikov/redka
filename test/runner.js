@@ -11,7 +11,7 @@ describe('Redka', function(){
       }
     });
 
-    var workerOne = redka.worker('one');
+    var workerOne = redka.worker('one', {timeout: 100});
     var workerTwo = redka.worker('two');
     utils.workers = {
       one: workerOne,
@@ -27,7 +27,8 @@ describe('Redka', function(){
       },
       fanout: function(data, callback){
         callback(data);
-      }
+      },
+      timeout: function(data ,callback){}
     });
 
     workerTwo.register({
@@ -66,17 +67,37 @@ describe('Redka', function(){
   require('./integration/redka.spec')(utils);
 
   afterEach(function(done){
-    utils.redka._reset(function(err){
-      utils.workers.one.removeAllListeners('complete');
-      utils.workers.one.removeAllListeners('failed');
-      utils.workers.one.removeAllListeners('enqueued');
-      utils.workers.one.removeAllListeners('dequeued');
-      utils.workers.two.removeAllListeners('complete');
-      utils.workers.two.removeAllListeners('failed');
-      utils.workers.two.removeAllListeners('enqueued');
-      utils.workers.two.removeAllListeners('dequeued');
-      done(err);
-    });
+    function drain(callback){
+      setTimeout(function(){
+        utils.redka.status(function(err, res){
+          if (err) return callback(err);
+          var complete = true;
+          console.log('queue status ', res);
+          Object.keys(res).forEach(function(wname){
+            if (res[wname].pending !== 0 || res[wname].progress !== 0) complete = false;
+          });
+          console.log('is complete ', complete);
+          complete ? callback() : drain(callback);
+        });
+      }, 10);
+    }
+   // drain(function(err){
+   //   if (err) console.error(err);
+   //   if (err) return done(err);
+      utils.redka._reset(function(err){
+        utils.workers.one.removeAllListeners('complete');
+        utils.workers.one.removeAllListeners('failed');
+        utils.workers.one.removeAllListeners('enqueued');
+        utils.workers.one.removeAllListeners('dequeued');
+        utils.workers.one.removeAllListeners('timeout');
+        utils.workers.two.removeAllListeners('complete');
+        utils.workers.two.removeAllListeners('failed');
+        utils.workers.two.removeAllListeners('enqueued');
+        utils.workers.two.removeAllListeners('dequeued');
+        utils.workers.two.removeAllListeners('timeout');
+        done(err);
+      });
+    //});
   });
 
 });

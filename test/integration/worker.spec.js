@@ -44,5 +44,12 @@ module.exports = function(utils){
       redka.enqueue('two', 'echo', 1);
       redka.enqueue('two', 'echo', 1);
     });
+    it('should timeout stuck jobs', function(done){
+      var w = utils.workers.one;
+      w.on('timeout', function(){
+        done();
+      });
+      redka.enqueue('one', 'timeout', 1);
+    });
   });
 };
