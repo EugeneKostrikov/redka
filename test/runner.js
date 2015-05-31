@@ -65,6 +65,7 @@ describe('Redka', function(){
   require('./integration/worker.spec')(utils);
   require('./integration/fanout.spec')(utils);
   require('./integration/redka.spec')(utils);
+  require('./integration/pubsub.spec')(utils);
 
   afterEach(function(done){
     function drain(callback){
