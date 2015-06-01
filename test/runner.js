@@ -6,8 +6,8 @@ describe('Redka', function(){
   before(function(){
     var redka = new Redka({
       redis: {
-        host: '127.0.0.1',
-        port: 6379
+        host: process.env.REDIS_PORT_6379_TCP_ADDR || '127.0.0.1',
+        port: process.env.REDIS_PORT_6379_TCP_PORT || 6379
       }
     });
 
