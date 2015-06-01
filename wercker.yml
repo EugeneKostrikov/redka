@@ -1,0 +1,15 @@
+box: google/nodejs
+services:
+  - redis:2.8
+
+build:
+  steps:
+    - npm-install
+    - script:
+      name: current environment
+      code: |-
+        node ./print-env.js
+    - script:
+      name: run tests
+      code: |-
+        npm test
