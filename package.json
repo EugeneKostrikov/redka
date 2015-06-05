@@ -12,7 +12,9 @@
     "async": "^1.0.0",
     "debug": "^2.2.0",
     "hiredis": "^0.3.0",
-    "redis": "^0.12.1"
+    "mongodb": "^2.0.33",
+    "redis": "^0.12.1",
+    "underscore": "^1.8.3"
   },
   "devDependencies": {
     "mocha": "^2.2.5",

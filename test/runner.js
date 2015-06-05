@@ -3,11 +3,18 @@
 var Redka = require('../lib/redka');
 describe('Redka', function(){
   var utils = {};
-  before(function(){
+  before(function(done){
     var redka = new Redka({
       redis: {
         host: process.env.REDIS_PORT_6379_TCP_ADDR || '127.0.0.1',
         port: process.env.REDIS_PORT_6379_TCP_PORT || 6379
+      },
+      enableReporting: true,
+      mongodb: {
+        dburl: (process.env.CI ?
+          'mongodb://' + process.env.MONGO_PORT_27017_TCP_ADDR + ':' + process.env.MONGO_PORT_27017_TCP_PORT :
+          'mongodb://localhost:27017') + '/redka-test',
+        collectionName: 'redka-jobs'
       }
     });
 
@@ -60,31 +67,19 @@ describe('Redka', function(){
 
     utils.redka = redka;
 
+    redka.onReady(function(){
+      utils.mongo = redka.mongodb;
+      done();
+    });
   });
 
   require('./integration/worker.spec')(utils);
   require('./integration/fanout.spec')(utils);
   require('./integration/redka.spec')(utils);
   require('./integration/pubsub.spec')(utils);
+  require('./integration/reporter.spec')(utils);
 
   afterEach(function(done){
-    function drain(callback){
-      setTimeout(function(){
-        utils.redka.status(function(err, res){
-          if (err) return callback(err);
-          var complete = true;
-          console.log('queue status ', res);
-          Object.keys(res).forEach(function(wname){
-            if (res[wname].pending !== 0 || res[wname].progress !== 0) complete = false;
-          });
-          console.log('is complete ', complete);
-          complete ? callback() : drain(callback);
-        });
-      }, 10);
-    }
-   // drain(function(err){
-   //   if (err) console.error(err);
-   //   if (err) return done(err);
       utils.redka._reset(function(err){
         utils.workers.one.removeAllListeners('complete');
         utils.workers.one.removeAllListeners('failed');
@@ -98,7 +93,6 @@ describe('Redka', function(){
         utils.workers.two.removeAllListeners('timeout');
         done(err);
       });
-    //});
   });
 
 });

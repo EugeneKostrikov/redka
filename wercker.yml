@@ -1,7 +1,7 @@
 box: google/nodejs
 services:
   - redis:2.8
-
+  - mongodb:3.0.3
 build:
   steps:
     - npm-install
