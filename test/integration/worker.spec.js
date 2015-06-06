@@ -2,19 +2,20 @@
 var should =  require('should');
 
 module.exports = function(utils){
-  var redka;
+  var redka, mongo;
   describe('worker', function(){
     beforeEach(function(){
       redka = utils.redka;
+      mongo = utils.mongo;
     });
     it('should fail errored job', function(done){
       var w = utils.workers.one;
       redka.enqueue('one', 'error', 1);
       w.once('failed', function(){
         setTimeout(function(){
-          redka.status(function(err, results){
+          mongo.find({status: 'failed'}).toArray(function(err, results){
             should.not.exist(err);
-            results.one.failed.should.equal(1);
+            results.length.should.equal(1);
             done();
           });
         }, 10);
@@ -24,9 +25,9 @@ module.exports = function(utils){
       var w = utils.workers.one;
       w.once('complete', function(){
         setTimeout(function(){
-          redka.status(function(err, results){
+          mongo.find({status: 'complete'}).toArray(function(err, results){
             should.not.exist(err);
-            results.one.complete.should.equal(1);
+            results.length.should.equal(1);
             done();
           });
         }, 10);

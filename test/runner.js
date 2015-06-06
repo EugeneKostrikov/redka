@@ -91,7 +91,9 @@ describe('Redka', function(){
         utils.workers.two.removeAllListeners('enqueued');
         utils.workers.two.removeAllListeners('dequeued');
         utils.workers.two.removeAllListeners('timeout');
-        done(err);
+        utils.mongo.remove({}, function(err){
+          done(err);
+        });
       });
   });
 
