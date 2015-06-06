@@ -56,5 +56,20 @@ module.exports = function(utils){
       });
       redka.enqueue('one', 'timeout', 1);
     });
+    it('should support objects in job params', function(done){
+      var w = utils.workers.one;
+      w.once('complete', function(){
+        setTimeout(function(){
+          mongo.findOne({status: 'complete'}, function(err, job){
+            should.not.exist(err);
+            job.params.should.be.an.Object;
+            job.params.one.two.should.equal(3);
+            job.result.should.equal('3');
+            done();
+          });
+        }, 10);
+      });
+      redka.enqueue('one', 'object', {one: {two: 3}});
+    });
   });
 };

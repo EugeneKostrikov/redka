@@ -35,7 +35,10 @@ describe('Redka', function(){
       fanout: function(data, callback){
         callback(data);
       },
-      timeout: function(data ,callback){}
+      timeout: function(data ,callback){},
+      object: function(data, callback){
+        callback(null, data.one.two);
+      }
     });
 
     workerTwo.register({
