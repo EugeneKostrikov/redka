@@ -1,6 +1,6 @@
 'use strict';
 
 exports.redis = require('../lib/redis-client').initialize({
-  port: 6379,
-  host: '127.0.0.1'
+  host: process.env.REDIS_PORT_6379_TCP_ADDR || '127.0.0.1',
+  port: process.env.REDIS_PORT_6379_TCP_PORT || 6379
 });
