@@ -14,7 +14,7 @@ module.exports = function(utils){
 
     it('should insert job document when worker it is processed', function(done){
       redka.enqueue('one', 'echo', 1);
-      w1.once('complete', function(){
+      //w1.once('complete', function(){
         setTimeout(function(){
           mongo.find({}).toArray(function(err, data){
             should.not.exist(err);
@@ -22,7 +22,7 @@ module.exports = function(utils){
             done();
           });
         }, 10);
-      });
+      //});
     });
 
   });

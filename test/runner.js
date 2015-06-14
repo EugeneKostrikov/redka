@@ -1,7 +1,14 @@
 'use strict';
-
+var _ = require('underscore');
+var async = require('async');
+var should = require('should');
 var Redka = require('../lib/redka');
-describe('Redka', function(){
+
+describe('Unit', function(){
+  require('./unit/worker.spec')();
+});
+
+describe('Integration', function(){
   var utils = {};
   before(function(done){
     var redka = new Redka({
@@ -38,6 +45,14 @@ describe('Redka', function(){
       timeout: function(data ,callback){},
       object: function(data, callback){
         callback(null, data.one.two);
+      },
+      dblcb: function(data, callback){
+        callback();
+        callback();
+      },
+      dblcbAsync: function(data, callback){
+        callback();
+        setImmediate(callback);
       }
     });
 
@@ -76,13 +91,33 @@ describe('Redka', function(){
     });
   });
 
-  require('./integration/worker.spec')(utils);
-  require('./integration/fanout.spec')(utils);
-  require('./integration/redka.spec')(utils);
-  require('./integration/pubsub.spec')(utils);
-  require('./integration/reporter.spec')(utils);
+  //describe('unit', function(){
+
+  //});
+  //describe('integration', function(){
+    require('./integration/worker.spec')(utils);
+    require('./integration/fanout.spec')(utils);
+    require('./integration/redka.spec')(utils);
+    require('./integration/pubsub.spec')(utils);
+    require('./integration/reporter.spec')(utils);
+  //});
 
   afterEach(function(done){
+    utils.redka.status(function(err, stats){
+      async.each(_.keys(stats), function(worker, nextWorker){
+        async.each(_.keys(stats[worker]), function(queue, nextQueue){
+          if (stats[worker][queue] === 0) return nextQueue();
+          utils.redka.client.lrange('redka_' + worker + '_' + queue, 0, -1, function(err, range){
+            if (err) return nextQueue(err);
+            utils.redka.client.hgetall(range[0], function(err, job){
+              if (err) return nextQueue(err);
+              console.log('on worker: ', worker, ' queue: ', queue, ' stuck job: ', job);
+              nextQueue();
+            });
+          });
+        }, nextWorker);
+      }, function(err){
+        if (err) throw err;
       utils.redka._reset(function(err){
         utils.workers.one.removeAllListeners('complete');
         utils.workers.one.removeAllListeners('failed');
@@ -98,7 +133,8 @@ describe('Redka', function(){
           done(err);
         });
       });
+      });
+    })
   });
-
 });
 

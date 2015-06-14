@@ -11,6 +11,7 @@ module.exports = function(utils){
       redka.enqueue('one', 'echo', 1);
       redka.enqueue('source', 'both', 'last');
       redka.enqueue('two', 'error', 1);
+      setTimeout(function(){
       redka.status(function(err, results){
         should.not.exist(err);
         results.should.be.an.Object;
@@ -19,6 +20,7 @@ module.exports = function(utils){
         results.source.should.have.keys(['pending', 'progress', 'failed', 'complete']);
         done();
       });
+      }, 10);
     });
   });
 };

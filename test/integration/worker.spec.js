@@ -71,5 +71,36 @@ module.exports = function(utils){
       });
       redka.enqueue('one', 'object', {one: {two: 3}});
     });
+    it('should fail job if callback is called twice', function(done){
+      var w = utils.workers.one;
+      w.once('complete', function(){
+        setTimeout(function(){
+          mongo.findOne({}, function(err, job){
+            should.not.exist(err);
+            job.status.should.equal('failed');
+            job.error.should.equal('Error: Job callback is called twice');
+            done();
+          });
+        }, 10);
+      });
+      redka.enqueue('one', 'dblcb', 1);
+    });
+    it.skip('should fail job if callback is called twice asynchronously with no delay', function(done){
+      var w = utils.workers.one;
+      //w.once('complete', function(){
+        setTimeout(function(){
+          redka.status(function(err, stats){
+            console.log('queue status ', stats);
+          mongo.findOne({status: 'failed'}, function(err, job){
+            should.not.exist(err);
+            job.status.should.equal('failed');
+            job.error.should.equal('Error: Job callback is called twice');
+            done();
+          });
+          });
+        }, 100);
+      //});
+      redka.enqueue('one', 'dblcbAsync', 1);
+    });
   });
 };
