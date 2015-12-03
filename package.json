@@ -4,7 +4,9 @@
   "description": "Simple and robust redis-backed queue",
   "main": "index.js",
   "scripts": {
-    "test": "mocha -R spec"
+    "test": "mocha -R spec",
+    "test-unit": "mocha -R spec --grep @unit",
+    "cover-unit": "istanbul cover --dir ./reports _mocha -- -g @unit"
   },
   "author": "Eugene Kostrikov <eugene.kostrikov@gmail.com>",
   "license": "MIT",

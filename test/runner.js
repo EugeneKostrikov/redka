@@ -4,11 +4,12 @@ var async = require('async');
 var should = require('should');
 var Redka = require('../lib/redka');
 
-describe('Unit', function(){
+describe('@unit', function(){
+  require('./unit/fanout');
   require('./unit/worker.spec')();
 });
 
-describe('Integration', function(){
+describe('@integration', function(){
   var utils = {};
   before(function(done){
     var redka = new Redka({
