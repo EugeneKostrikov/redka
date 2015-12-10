@@ -7,6 +7,7 @@ var Redka = require('../lib/redka');
 describe('@unit', function(){
   require('./unit/fanout');
   require('./unit/worker.spec')();
+  require('./unit/redka');
 });
 
 describe('@integration', function(){

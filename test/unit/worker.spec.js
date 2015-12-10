@@ -8,7 +8,7 @@ var Job = require('../../lib/job');
 var redisClient = require('../../lib/redis-client');
 
 //SUT
-var Worker = require('../../lib/worker');
+var workerModule = require('../../lib/worker');
 
 module.exports = function(){
   describe('worker', function(){
@@ -16,19 +16,17 @@ module.exports = function(){
     beforeEach(function(){
       redis = helpers.mockRedis();
       sinon.stub(redisClient, 'initialize').returns(redis);
-      worker = new Worker('test', {}, {timeout: 10});
+      worker = workerModule.create('test', {}, {timeout: 10});
+      sinon.stub(worker, 'dequeue'); //TO prevent infinite loop;
       cb = sinon.stub().yieldsAsync(null);
       worker.register({testing: cb});
     });
     afterEach(function(){
       redisClient.initialize.restore();
     });
-    it('should be bound to single queue');
-    it('should be able to process many job names');
-    it('should pick next job once previous is complete');
-    it('should wait for new jobs when nothing can be pulled out of the queue');
     describe('plumbing', function(){
       beforeEach(function(){
+        worker.dequeue.restore();
         sinon.stub(worker, 'timeout');
       });
       it('should be polling for jobs until it hits one', function(done){
@@ -153,10 +151,31 @@ module.exports = function(){
         });
       });
     });
-    describe('register', function(){});
-    describe('_start', function(){});
+    describe('register', function(){
+      beforeEach(function(){
+        sinon.stub(worker, 'poll');
+      });
+      afterEach(function(){
+        worker.poll.restore();
+      });
+      it('should extend registered callbacks', function(){
+        worker.register({nextcb: function(){}});
+        worker.callbacks.should.have.keys(['testing','nextcb']);
+      });
+      it('should start polling for jobs immediately after callbacks were registered', function(){
+        worker.status = 'INIT';
+        worker.register({new: function(){}});
+        worker.poll.callCount.should.equal(1);
+      });
+      it('should not start polling for new jobs when callbacks are registered if worker state is not INIT', function(){
+        worker.status = 'RUNNING';
+        worker.register({new: function(){}});
+        worker.poll.callCount.should.equal(0);
+      });
+    });
     describe('poll', function(){
       beforeEach(function(){
+        worker.dequeue.restore();
         sinon.stub(worker, 'dequeue');
         sinon.stub(worker, 'handleError');
         sinon.stub(worker, 'fail');
@@ -209,6 +228,21 @@ module.exports = function(){
         worker.complete.callCount.should.equal(1);
         worker.complete.getCall(0).args[0].should.equal(job);
         worker.complete.getCall(0).args[1].should.equal(result);
+      });
+      it('should correctly set statuses', function(){
+        worker.status = 'INIT';
+        worker.poll();
+        worker.status.should.equal('POLLING');
+        worker.dequeue.yield(null);
+        worker.status.should.equal('WORKING');
+        worker.work.yield(null);
+        worker.status.should.equal('FINISHING');
+      });
+      it('should not pick up new job if the status is STOPPING', function(){
+        worker.status = 'STOPPING';
+        worker.poll();
+        worker.status.should.equal('STOPPED');
+        worker.dequeue.callCount.should.equal(0);
       });
     });
     describe('enqueue', function(){
@@ -267,12 +301,15 @@ module.exports = function(){
     });
     describe('dequeue', function(){
       beforeEach(function(){
+        worker.dequeue.restore();
         sinon.spy(worker, 'dequeue');
         sinon.stub(worker, 'timeout');
+        sinon.stub(Job, 'create').returns({});
       });
       afterEach(function(){
         worker.dequeue.restore();
         worker.timeout.restore();
+        Job.create.restore();
       });
       it('should set a blocking pop and push from pending list to progress list', function(done){
         worker.pollingClient.brpoplpush.onFirstCall().yieldsAsync('stop');
@@ -333,10 +370,12 @@ module.exports = function(){
       });
       it('should initialize the job', function(done){
         worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
-        worker.client.multi().exec.yieldsAsync(null, ['date', {}]);
-        worker.dequeue(function(err, job){
+        let jobData = {};
+        worker.client.multi().exec.yieldsAsync(null, ['date', jobData]);
+        worker.dequeue(function(err){
           should.not.exist(err);
-          (job instanceof Job).should.equal(true);
+          Job.create.callCount.should.equal(1);
+          Job.create.getCall(0).args[0].should.equal(jobData);
           done();
         });
       });
@@ -743,6 +782,26 @@ module.exports = function(){
         cb.yield(null);
         callback.callCount.should.equal(2);
         callback.getCall(1).args[0].message.should.match(/callback is called twice/);
+      });
+    });
+    describe('stop', function(){
+      let clock;
+      beforeEach(function(){
+        clock = sinon.useFakeTimers();
+      });
+      afterEach(function(){
+        clock.restore();
+      });
+      it('should set worker status to STOPPING', function(){
+        worker.status.should.equal('POLLING');
+        worker.stop(function(){});
+        worker.status.should.equal('STOPPING');
+      });
+      it('should callback once status is changed to STOPPED', function(done){
+        worker.status.should.equal('POLLING');
+        worker.stop(done);
+        worker.status = 'STOPPED';
+        clock.tick(101);
       });
     });
   });
