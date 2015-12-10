@@ -5,12 +5,20 @@ const should = require('should');
 const helpers = require('./helpers');
 
 const Redka = require('../../lib/redka');
+const Reporter = require('../../lib/reporter');
 const workerModule = require('../../lib/worker');
 const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 
 describe('redka', function(){
-
+  beforeEach(function(){
+    sinon.stub(Reporter, 'create').returns('reporter');
+    sinon.stub(Reporter, 'dummy').returns('reporter');
+  });
+  afterEach(function(){
+    Reporter.create.restore();
+    Reporter.dummy.restore();
+  });
   describe('initialization', function(){
     beforeEach(function(){
       sinon.stub(client, 'initialize').returns('client');
@@ -32,6 +40,29 @@ describe('redka', function(){
       redka.prefix.should.equal('redka_');
       let other = new Redka({prefix: 'custom_'});
       other.prefix.should.equal('custom_');
+    });
+    it('should start mongo reporter if reporting is enabled', function(){
+      let opts  = {
+        redis: {},
+        mongodb: {},
+        enableReporting: true,
+        reportingOptions: {}
+      };
+      let redka = new Redka(opts);
+      redka.reporter.should.equal('reporter');
+      Reporter.create.callCount.should.equal(1);
+      Reporter.create.getCall(0).args[0].should.equal(opts.redis);
+      Reporter.create.getCall(0).args[1].should.equal(opts.mongodb);
+      Reporter.create.getCall(0).args[2].should.equal(opts.reportingOptions);
+    });
+    it('should start dummy reporter if reporting is disabled', function(){
+      let opts  = {
+        redis: {}
+      };
+      let redka = new Redka(opts);
+      redka.reporter.should.equal('reporter');
+      Reporter.dummy.callCount.should.equal(1);
+      Reporter.dummy.getCall(0).args[0].should.equal(opts.redis);
     });
   });
 
