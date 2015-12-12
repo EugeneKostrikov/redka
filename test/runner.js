@@ -9,6 +9,7 @@ describe('@unit', function(){
   require('./unit/worker.spec')();
   require('./unit/redka');
   require('./unit/reporter');
+  require('./unit/job');
 });
 
 describe('@integration', function(){
