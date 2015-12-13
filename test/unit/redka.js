@@ -11,9 +11,13 @@ const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 
 describe('redka', function(){
+  let reporter;
   beforeEach(function(){
-    sinon.stub(Reporter, 'create').returns('reporter');
-    sinon.stub(Reporter, 'dummy').returns('reporter');
+    reporter = {
+      stop: sinon.stub()
+    };
+    sinon.stub(Reporter, 'create').returns(reporter);
+    sinon.stub(Reporter, 'dummy').returns(reporter);
   });
   afterEach(function(){
     Reporter.create.restore();
@@ -49,7 +53,7 @@ describe('redka', function(){
         reportingOptions: {}
       };
       let redka = new Redka(opts);
-      redka.reporter.should.equal('reporter');
+      redka.reporter.should.equal(reporter);
       Reporter.create.callCount.should.equal(1);
       Reporter.create.getCall(0).args[0].should.equal(opts.redis);
       Reporter.create.getCall(0).args[1].should.equal(opts.mongodb);
@@ -60,7 +64,7 @@ describe('redka', function(){
         redis: {}
       };
       let redka = new Redka(opts);
-      redka.reporter.should.equal('reporter');
+      redka.reporter.should.equal(reporter);
       Reporter.dummy.callCount.should.equal(1);
       Reporter.dummy.getCall(0).args[0].should.equal(opts.redis);
     });
@@ -211,14 +215,17 @@ describe('redka', function(){
       redka.removeWorker.getCall(0).args[0].should.equal('one');
       redka.removeWorker.getCall(1).args[0].should.equal('two');
     });
-    it('should remove all running workers', function(){
+    it('should remove all running workers and the reporter', function(){
       let cb = sinon.stub();
       redka.worker('one');
       redka.worker('two');
       redka.stop(cb);
       redka.removeWorker.callCount.should.equal(2);
+      redka.reporter.stop.callCount.should.equal(1);
       cb.callCount.should.equal(0);
-      redka.removeWorker.yield(null); //fires both
+      redka.removeWorker.yield(null); //fires both workers
+      cb.callCount.should.equal(0);
+      redka.reporter.stop.yield(null); //fired reporter
       cb.callCount.should.equal(1);
     });
   });

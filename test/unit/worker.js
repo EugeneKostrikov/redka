@@ -244,6 +244,13 @@ module.exports = function(){
         worker.status.should.equal('STOPPED');
         worker.dequeue.callCount.should.equal(0);
       });
+      it('shouls switch status to STOPPED and return once dequeue calls back with no job', function(){
+        worker.poll();
+        worker.status = 'STOPPING';
+        worker.dequeue.yield();
+        worker.status.should.equal('STOPPED');
+        worker.work.callCount.should.equal(0);
+      });
     });
     describe('enqueue', function(){
       beforeEach(function(){
@@ -321,11 +328,11 @@ module.exports = function(){
           done();
         });
       });
-      it('should release the block in 10 millis', function(done){
+      it('should release the block in 1 second', function(done){
         worker.pollingClient.brpoplpush.onFirstCall().yieldsAsync('stop');
         worker.dequeue(function(err){
           err.should.equal('stop');
-          worker.pollingClient.brpoplpush.getCall(0).args[2].should.equal(10);
+          worker.pollingClient.brpoplpush.getCall(0).args[2].should.equal(1);
           done();
         });
       });
@@ -386,6 +393,14 @@ module.exports = function(){
           should.not.exist(err);
           worker.timeout.callCount.should.equal(1);
           worker.timeout.getCall(0).args[0].should.equal(job);
+          done();
+        });
+      });
+      it('should not try dequeueing job if status is STOPPING', function(done){
+        worker.status = 'STOPPING';
+        worker.dequeue(function(err, job){
+          should.not.exist(err);
+          should.not.exist(job);
           done();
         });
       });

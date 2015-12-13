@@ -14,7 +14,7 @@ describe('reporters', function(){
     beforeEach(function(){
       redis = helpers.mockRedis();
       redis.send_command = sinon.stub();
-      mongo = {insert: sinon.stub()};
+      mongo = {insertOne: sinon.stub()};
       sinon.stub(redisClient, 'initialize').returns(redis);
       sinon.stub(mongoClient, 'connect').yields(null, mongo);
     });
@@ -79,7 +79,7 @@ describe('reporters', function(){
         reporter.poll();
         redis.send_command.callCount.should.equal(1);
         redis.send_command.getCall(0).args[0].should.equal('brpop');
-        redis.send_command.getCall(0).args[1].should.eql(['complete', 'failed', 500]);
+        redis.send_command.getCall(0).args[1].should.eql(['complete', 'failed', 1]);
       });
       it('should handle result if polling returned something', function(){
         reporter.poll();
@@ -91,6 +91,12 @@ describe('reporters', function(){
         reporter.poll();
         redis.send_command.yield(null, null);
         reporter.poll.callCount.should.equal(2);
+      });
+      it('should not poll if worker status is STOPPING', function(){
+        reporter.status = 'STOPPING';
+        reporter.poll();
+        redis.send_command.callCount.should.equal(0);
+        reporter.status.should.equal('STOPPED');
       });
     });
     describe('handle', function(){
@@ -122,15 +128,15 @@ describe('reporters', function(){
       it('should push serialized version into mongo', function(){
         let data = {};
         redis.hgetall.yields(null, data);
-        mongo.insert.yields(null);
+        mongo.insertOne.yields(null);
         reporter.handle('key');
-        mongo.insert.callCount.should.equal(1);
-        mongo.insert.getCall(0).args[0].should.equal('serialized');
+        mongo.insertOne.callCount.should.equal(1);
+        mongo.insertOne.getCall(0).args[0].should.equal('serialized');
       });
       it('should drop handled job', function(){
         let data = {};
         redis.hgetall.yields(null, data);
-        mongo.insert.yields(null);
+        mongo.insertOne.yields(null);
         redis.del.yields(null);
         reporter.handle('key');
         redis.del.callCount.should.equal(1);
@@ -139,7 +145,7 @@ describe('reporters', function(){
       it('should poll for the next job', function(){
         let data = {};
         redis.hgetall.yields(null, data);
-        mongo.insert.yields(null);
+        mongo.insertOne.yields(null);
         redis.del.yields(null);
         reporter.handle('key');
         reporter.poll.callCount.should.equal(1);
@@ -156,6 +162,33 @@ describe('reporters', function(){
         sinon.spy(reporter, 'noopinsert');
         reporter.handle('test');
         reporter.noopinsert.callCount.should.equal(1);
+      });
+    });
+    describe('stop', function(){
+      let clock;
+      beforeEach(function(){
+        clock = sinon.useFakeTimers();
+      });
+      afterEach(function(){
+        clock.restore();
+      });
+      it('should set status to STOPPING', function(){
+        let reporter = Reporter.dummy({});
+        reporter.status.should.equal('RUNNING');
+        reporter.stop();
+        reporter.status.should.equal('STOPPING');
+      });
+      it('should callback once status is STOPPED', function(){
+        let reporter = Reporter.dummy({});
+        let cb = sinon.stub();
+        reporter.stop(cb);
+        reporter.status.should.equal('STOPPING');
+        cb.callCount.should.equal(0);
+        clock.tick(100);
+        cb.callCount.should.equal(0);
+        reporter.status = 'STOPPED';
+        clock.tick(100);
+        cb.callCount.should.equal(1);
       });
     });
   });
