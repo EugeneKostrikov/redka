@@ -5,6 +5,7 @@ describe('@unit', function(){
   require('./unit/redka');
   require('./unit/reporter');
   require('./unit/job');
+  require('./unit/callbacks');
 });
 
 describe('@integration', function(){

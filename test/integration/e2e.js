@@ -4,9 +4,9 @@ const should = require('should');
 const Redka = require('../../lib/redka');
 
 describe('E2E flow', function(){
-  this.timeout(20000);
-  let redka;
-  beforeEach(function(){
+  this.timeout(200000);
+  let redka, worker;
+  beforeEach(function(done){
     redka = new Redka({
       redis: {
         host: process.env.REDIS_PORT_6379_TCP_ADDR || '127.0.0.1',
@@ -20,11 +20,19 @@ describe('E2E flow', function(){
         collectionName: 'redka-jobs'
       }
     });
-    let worker = redka.worker('testing');
+    worker = redka.worker('testing');
     worker.register({
       ok: function(data, cb) {cb(null, data)},
       fail: function(data, cb) {cb(data);}
     });
+    let int = setInterval(function(){
+      if (redka.reporter.mongo){
+        clearInterval(int);
+        redka.reporter.mongo.deleteMany({}, function(){
+          done();
+        });
+      }
+    }, 100);
   });
   afterEach(function(done){
     redka.reporter.mongo.deleteMany({}, function(){
@@ -86,5 +94,23 @@ describe('E2E flow', function(){
         }
       ], done);
     }, 100);
+  });
+  it('should be able to callback when job is complete', function(done){
+    redka.enqueue('testing', 'ok', 'data', function(error, result){
+      should.not.exist(error);
+      result.should.equal('data');
+      setTimeout(function(){
+        done();
+      }, 100);
+    });
+  });
+  it('should pass through job error if the job fails', function(done){
+    redka.enqueue('testing', 'fail', 'data', function(error, result){
+      error.should.equal('data');
+      should.not.exist(result);
+      setTimeout(function(){
+        done();
+      }, 100);
+    });
   });
 });

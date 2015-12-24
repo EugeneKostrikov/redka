@@ -520,9 +520,11 @@ module.exports = function(){
         worker.client.lrange.yieldsAsync(null, ['jobid']);
         worker.fail(job, error, function(err){
           should.not.exist(err);
-          worker.client.multi().lpush.callCount.should.equal(1);
+          worker.client.multi().lpush.callCount.should.equal(2);
           worker.client.multi().lpush.getCall(0).args[0].should.equal('test_failed');
           worker.client.multi().lpush.getCall(0).args[1].should.equal('jobid');
+          worker.client.multi().lpush.getCall(1).args[0].should.equal('test_callback');
+          worker.client.multi().lpush.getCall(1).args[1].should.equal('jobid');
           done();
         });
       });
@@ -618,9 +620,11 @@ module.exports = function(){
         worker.client.lrange.yieldsAsync(null, ['jobid']);
         worker.complete(job, result, function(err){
           should.not.exist(err);
-          worker.client.multi().lpush.callCount.should.equal(1);
+          worker.client.multi().lpush.callCount.should.equal(2);
           worker.client.multi().lpush.getCall(0).args[0].should.equal('test_complete');
           worker.client.multi().lpush.getCall(0).args[1].should.equal('jobid');
+          worker.client.multi().lpush.getCall(1).args[0].should.equal('test_callback');
+          worker.client.multi().lpush.getCall(1).args[1].should.equal('jobid');
           done();
         });
       });

@@ -9,19 +9,25 @@ const Reporter = require('../../lib/reporter');
 const workerModule = require('../../lib/worker');
 const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
+const Callbacks = require('../../lib/callbacks');
 
 describe('redka', function(){
-  let reporter;
+  let reporter, callbacks;
   beforeEach(function(){
+    callbacks = {
+      waitFor: sinon.stub()
+    };
     reporter = {
       stop: sinon.stub()
     };
     sinon.stub(Reporter, 'create').returns(reporter);
     sinon.stub(Reporter, 'dummy').returns(reporter);
+    sinon.stub(Callbacks, 'initialize').returns(callbacks);
   });
   afterEach(function(){
     Reporter.create.restore();
     Reporter.dummy.restore();
+    Callbacks.initialize.restore();
   });
   describe('initialization', function(){
     beforeEach(function(){
@@ -125,6 +131,7 @@ describe('redka', function(){
       redis = helpers.mockRedis();
       sinon.stub(client, 'initialize').returns(redis);
       redka = new Redka({});
+      redka.jobCallbacks.waitFor.yields(null, {status: 'complete'});
     });
     afterEach(function(){
       Job.create.restore();
@@ -165,6 +172,45 @@ describe('redka', function(){
       redka.enqueue('queue', 'name', 'params', function(err){
         err.should.equal('stop');
         redis.lpush.callCount.should.equal(1);
+        done();
+      });
+    });
+    it('should register the callback if it was provided', function(done){
+      redka.jobCallbacks.waitFor.yields(null, {status: 'complete'});
+      redka.enqueue('queue', 'name', 'params', function(){
+        redka.jobCallbacks.waitFor.callCount.should.equal(1);
+        redka.jobCallbacks.waitFor.getCall(0).args[0].should.equal('redka_queue_callback');
+        redka.jobCallbacks.waitFor.getCall(0).args[1].should.equal('jobid');
+        done();
+      });
+    });
+    it('should not wait for job completion if no callback is provided to enqueue', function(){
+      redis.hmset.yields(null);
+      redis.lpush.yields(null);
+      redka.enqueue('queue', 'name', 'params');
+      redka.jobCallbacks.waitFor.callCount.should.equal(0);
+    });
+    it('should callback with job error when job status is failed', function(done){
+      redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'failed', error: 'err'});
+      redka.enqueue('queue', 'name', 'params', function(err, result){
+        err.should.equal('err');
+        should.not.exist(result);
+        done();
+      });
+    });
+    it('should callback with job result when job status is compete', function(done){
+      redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'complete', result: 'result'});
+      redka.enqueue('queue', 'name', 'params', function(err, result){
+        should.not.exist(err);
+        result.should.equal('result');
+        done();
+      });
+    });
+    it('should callback with unexpected state error if job status is unknown', function(done){
+      redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'unknown'});
+      redka.enqueue('queue', 'name', 'params', function(err, result){
+        err.message.should.equal('Unexpected job status');
+        should.not.exist(result);
         done();
       });
     });
