@@ -97,6 +97,12 @@ describe('callbacks', function(){
     });
   });
   describe('handle', function(){
+    beforeEach(function(){
+      sinon.stub(callbacks, 'poll');
+    });
+    afterEach(function(){
+      callbacks.poll.restore();
+    });
     describe('callback exists', function(){
       let cb;
       beforeEach(function(){
@@ -128,14 +134,25 @@ describe('callbacks', function(){
         cb.callCount.should.equal(1);
         cb.getCall(0).args[1].should.equal(job)
       });
+      it('should iterate polling', function(){
+        let data = {}, job = {};
+        Job.create.returns(job);
+        redis.hgetall.yields(null, data);
+        callbacks.handle('list', 'jobid');
+        callbacks.poll.callCount.should.equal(1);
+      });
     });
     describe('no callback', function(){
-      it('should push id back into the list', function(){
+      it.skip('should push id back into the list', function(){
         callbacks.handle('list', 'id');
         redis.hgetall.callCount.should.equal(0);
         redis.lpush.callCount.should.equal(1);
         redis.lpush.getCall(0).args[0].should.equal('list');
         redis.lpush.getCall(0).args[1].should.equal('id');
+      });
+      it('should iterate polling', function(){
+        callbacks.handle('list', 'id');
+        callbacks.poll.callCount.should.equal(1);
       });
     });
   });
