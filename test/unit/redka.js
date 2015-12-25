@@ -10,24 +10,31 @@ const workerModule = require('../../lib/worker');
 const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 const Callbacks = require('../../lib/callbacks');
+const Destructor = require('../../lib/destructor');
 
 describe('redka', function(){
-  let reporter, callbacks;
+  let reporter, callbacks, destructor;
   beforeEach(function(){
     callbacks = {
       waitFor: sinon.stub()
     };
     reporter = {
-      stop: sinon.stub()
+      stop: sinon.stub(),
+      push: sinon.stub()
+    };
+    destructor = {
+      drain: sinon.stub()
     };
     sinon.stub(Reporter, 'create').returns(reporter);
     sinon.stub(Reporter, 'dummy').returns(reporter);
     sinon.stub(Callbacks, 'initialize').returns(callbacks);
+    sinon.stub(Destructor, 'initialize').returns(destructor);
   });
   afterEach(function(){
     Reporter.create.restore();
     Reporter.dummy.restore();
     Callbacks.initialize.restore();
+    Destructor.initialize.restore();
   });
   describe('initialization', function(){
     beforeEach(function(){
@@ -112,13 +119,6 @@ describe('redka', function(){
       should.exist(redka._workers.redka_q);
       redka._workers.redka_q.should.equal(worker);
     });
-    it('should push worker to the reporter', function(){
-      redka.options.enableReporting = true;
-      redka.reporter = {registerWorker: sinon.stub()};
-      redka.worker('q');
-      redka.reporter.registerWorker.callCount.should.equal(1);
-      redka.reporter.registerWorker.getCall(0).args[0].should.equal(worker);
-    });
     it('should return created worker', function(){
       redka.worker('q').should.equal(worker);
     });
@@ -184,16 +184,11 @@ describe('redka', function(){
         done();
       });
     });
-    it('should not wait for job completion if no callback is provided to enqueue', function(){
-      redis.hmset.yields(null);
-      redis.lpush.yields(null);
-      redka.enqueue('queue', 'name', 'params');
-      redka.jobCallbacks.waitFor.callCount.should.equal(0);
-    });
     it('should callback with job error when job status is failed', function(done){
       redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'failed', error: 'err'});
       redka.enqueue('queue', 'name', 'params', function(err, result){
-        err.should.equal('err');
+        err.should.be.instanceOf(Error);
+        err.message.should.equal('err');
         should.not.exist(result);
         done();
       });
@@ -211,6 +206,24 @@ describe('redka', function(){
       redka.enqueue('queue', 'name', 'params', function(err, result){
         err.message.should.equal('Unexpected job status');
         should.not.exist(result);
+        done();
+      });
+    });
+    it('should push completed job to reporter', function(done){
+      let job = {status: 'complete', result: 'result'};
+      redka.jobCallbacks.waitFor.yieldsAsync(null, job);
+      redka.enqueue('queue', 'name', 'params', function(){
+        redka.reporter.push.callCount.should.equal(1);
+        redka.reporter.push.getCall(0).args[0].should.equal(job);
+        done();
+      });
+    });
+    it('should drain the job with destructor', function(done){
+      let job = {id: 'id', status: 'complete', result: 'result'};
+      redka.jobCallbacks.waitFor.yieldsAsync(null, job);
+      redka.enqueue('queue', 'name', 'params', function(){
+        redka.destructor.drain.callCount.should.equal(1);
+        redka.destructor.drain.getCall(0).args[0].should.equal(job.id);
         done();
       });
     });

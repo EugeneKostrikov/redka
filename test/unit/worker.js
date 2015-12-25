@@ -778,15 +778,6 @@ module.exports = function(){
           done();
         });
       });
-      it.skip('should throw the job to backlog if no callback is registered for job name', function(done){
-        let job = {name: 'unknown'};
-        worker.work(job, function(err){
-          should.not.exist(err);
-          worker.throwToBacklog.callCount.should.equal(1);
-          worker.throwToBacklog.getCall(0).args[0].should.equal(job);
-          done();
-        });
-      });
       it('should call the worker providing job params', function(done){
         worker.work(job, function(err){
           should.not.exist(err);
