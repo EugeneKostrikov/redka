@@ -679,7 +679,7 @@ module.exports = function(){
         worker.handleError('err');
       });
     });
-    describe('throwToBacklog', function(){
+    describe('throwToBacklog@deprecated', function(){
       let job;
       beforeEach(function(){
         job = {id: 'jobid'};
@@ -763,12 +763,22 @@ module.exports = function(){
       let job;
       beforeEach(function(){
         job = {name: 'testing', params: {}};
-        sinon.stub(worker, 'throwToBacklog').yieldsAsync(null);
+        sinon.stub(worker, 'fail').yieldsAsync(null);
       });
       afterEach(function(){
-        worker.throwToBacklog.restore();
+        worker.fail.restore();
       });
-      it('should throw the job to backlog if no callback is registered for job name', function(done){
+      it('should fail the job if no callback was matched', function(done){
+        let job = {name: 'unknown'};
+        worker.work(job, function(err){
+          should.not.exist(err);
+          worker.fail.callCount.should.equal(1);
+          worker.fail.getCall(0).args[0].should.equal(job);
+          worker.fail.getCall(0).args[1].message.should.equal('No callback registered for job');
+          done();
+        });
+      });
+      it.skip('should throw the job to backlog if no callback is registered for job name', function(done){
         let job = {name: 'unknown'};
         worker.work(job, function(err){
           should.not.exist(err);
