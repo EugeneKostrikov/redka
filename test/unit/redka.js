@@ -223,7 +223,7 @@ describe('redka', function(){
       redka.jobCallbacks.waitFor.yieldsAsync(null, job);
       redka.enqueue('queue', 'name', 'params', function(){
         redka.destructor.drain.callCount.should.equal(1);
-        redka.destructor.drain.getCall(0).args[0].should.equal(job.id);
+        redka.destructor.drain.getCall(0).args[0].should.equal(job);
         done();
       });
     });

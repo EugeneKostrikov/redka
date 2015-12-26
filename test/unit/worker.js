@@ -252,60 +252,6 @@ module.exports = function(){
         worker.work.callCount.should.equal(0);
       });
     });
-    describe('enqueue', function(){
-      beforeEach(function(){
-        sinon.spy(worker, 'handleError');
-      });
-      afterEach(function(){
-        worker.handleError.restore();
-      });
-      it('should initialise the job', function(done){
-        worker.enqueue('name', 'params', function(){
-          let job = worker.client.hmset.getCall(0).args[1];
-          should.exist(job.id);
-          job.params.should.equal('params');
-          job.name.should.equal('name');
-          done();
-        });
-      });
-      it('should set the job params to job.id key', function(done){
-        worker.enqueue('name', 'params', function(){
-          let job = worker.client.hmset.getCall(0).args[1];
-          worker.client.hmset.callCount.should.equal(1);
-          worker.client.hmset.getCall(0).args[0].should.equal(job.id);
-          done();
-        });
-      });
-      it('should pass possible hmset error to handleError', function(done){
-        let err = {};
-        worker.client.hmset.yieldsAsync(err);
-        worker.enqueue('name', 'params', function(err){
-          should.exist(err);
-          worker.handleError.callCount.should.equal(1);
-          worker.handleError.getCall(0).args[0].should.equal(err);
-          done();
-        });
-      });
-      it('should push the job id to pending list', function(done){
-        worker.enqueue('name', 'params', function(){
-          worker.client.lpush.callCount.should.equal(1);
-          worker.client.lpush.getCall(0).args[0].should.equal('test_pending');
-          let jobId = worker.client.hmset.getCall(0).args[1].id;
-          worker.client.lpush.getCall(0).args[1].should.equal(jobId);
-          done();
-        });
-      });
-      it('should pass possible push error to handleError', function(done){
-        let err = {};
-        worker.client.lpush.yieldsAsync(err);
-        worker.enqueue('name', 'params', function(err){
-          should.exist(err);
-          worker.handleError.callCount.should.equal(1);
-          worker.handleError.getCall(0).args[0].should.equal(err);
-          done();
-        });
-      });
-    });
     describe('dequeue', function(){
       beforeEach(function(){
         worker.dequeue.restore();

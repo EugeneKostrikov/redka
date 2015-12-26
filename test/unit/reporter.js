@@ -3,7 +3,6 @@ const sinon = require('sinon');
 const should = require('should');
 const helpers = require('./helpers');
 
-const Job = require('../../lib/job');
 const redisClient = require('../../lib/redis-client');
 const mongoClient = require('../../lib/mongo-client');
 const Reporter = require('../../lib/reporter');
@@ -16,7 +15,7 @@ describe('reporters', function(){
       redis.send_command = sinon.stub();
       mongo = {insertOne: sinon.stub()};
       sinon.stub(redisClient, 'initialize').returns(redis);
-      sinon.stub(mongoClient, 'connect').yields(null, mongo);
+      sinon.stub(mongoClient, 'connect');
     });
     afterEach(function(){
       redisClient.initialize.restore();
@@ -36,132 +35,48 @@ describe('reporters', function(){
         mongoClient.connect.callCount.should.equal(1);
         mongoClient.connect.getCall(0).args[0].should.equal(opts);
       });
-      it('should start polling for jobs', function(){
-        redis.send_command.called.should.not.be.ok;
-        Reporter.create();
-        redis.send_command.called.should.be.ok;
-      });
-    });
-    describe('registerWorker', function(){
-      let reporter, worker;
-      beforeEach(function(){
-        reporter = Reporter.create();
-        worker = {
-          lists: {
-            complete: 'complete-list',
-            failed: 'failed-list'
-          }
-        };
-      });
-      it('should extend monitored lists with complete queue', function(){
-        reporter.registerWorker(worker);
-        reporter.lists.should.containEql('complete-list');
-      });
-      it('should extend monitored lists with failed queue', function(){
-        reporter.registerWorker(worker);
-        reporter.lists.should.containEql('failed-list');
-      });
-    });
-    describe('poll', function(){
-      let reporter;
-      beforeEach(function(){
-        reporter = Reporter.create({}, {});
-        redis.send_command = sinon.stub();
-        sinon.stub(reporter, 'handle');
-        sinon.spy(reporter, 'poll');
-        reporter.registerWorker({lists: {complete: 'complete', failed: 'failed'}});
-      });
-      afterEach(function(){
-        reporter.handle.restore();
-        reporter.poll.restore();
-      });
-      it('should submit all monitored lists', function(){
-        reporter.poll();
-        redis.send_command.callCount.should.equal(1);
-        redis.send_command.getCall(0).args[0].should.equal('brpop');
-        redis.send_command.getCall(0).args[1].should.eql(['complete', 'failed', 1]);
-      });
-      it('should handle result if polling returned something', function(){
-        reporter.poll();
-        redis.send_command.yield(null, [null, 'result']);
-        reporter.handle.callCount.should.equal(1);
-        reporter.handle.getCall(0).args[0].should.equal('result');
-      });
-      it('should poll again if result is empty', function(){
-        reporter.poll();
-        redis.send_command.yield(null, null);
-        reporter.poll.callCount.should.equal(2);
-      });
-      it('should not poll if worker status is STOPPING', function(){
-        reporter.status = 'STOPPING';
-        reporter.poll();
-        redis.send_command.callCount.should.equal(0);
-        reporter.status.should.equal('STOPPED');
-      });
-    });
-    describe('handle', function(){
-      let reporter, job;
-      beforeEach(function(){
-        reporter = Reporter.create({}, {});
-        job = {
-          serialize: sinon.stub().returns('serialized')
-        };
-        sinon.stub(reporter, 'poll');
-        sinon.stub(Job, 'create').returns(job);
-      });
-      afterEach(function(){
-        reporter.poll.restore();
-        Job.create.restore();
-      });
-      it('should fetch job data', function(){
-        reporter.handle('key');
-        redis.hgetall.callCount.should.equal(1);
-        redis.hgetall.getCall(0).args[0].should.equal('key');
-      });
-      it('should initialize the job', function(){
-        let data = {};
-        redis.hgetall.yields(null, data);
-        reporter.handle('key');
-        Job.create.callCount.should.equal(1);
-        Job.create.getCall(0).args[0].should.equal(data);
-      });
-      it('should push serialized version into mongo', function(){
-        let data = {};
-        redis.hgetall.yields(null, data);
-        mongo.insertOne.yields(null);
-        reporter.handle('key');
-        mongo.insertOne.callCount.should.equal(1);
-        mongo.insertOne.getCall(0).args[0].should.equal('serialized');
-      });
-      it('should drop handled job', function(){
-        let data = {};
-        redis.hgetall.yields(null, data);
-        mongo.insertOne.yields(null);
-        redis.del.yields(null);
-        reporter.handle('key');
-        redis.del.callCount.should.equal(1);
-        redis.del.getCall(0).args[0].should.equal('key');
-      });
-      it('should poll for the next job', function(){
-        let data = {};
-        redis.hgetall.yields(null, data);
-        mongo.insertOne.yields(null);
-        redis.del.yields(null);
-        reporter.handle('key');
-        reporter.poll.callCount.should.equal(1);
-      });
     });
     describe('dummy', function(){
       it('should not open connection to mongo', function(){
-        let reporter = Reporter.dummy({});
-        should.not.exist(reporter.mongo);
+        Reporter.dummy({});
+        mongoClient.connect.callCount.should.equal(0);
       });
       it('should use noop function in handler', function(){
-        redis.hgetall.yields(null, {});
         let reporter = Reporter.dummy({});
-        sinon.spy(reporter, 'noopinsert');
-        reporter.handle('test');
-        reporter.noopinsert.callCount.should.equal(1);
+        reporter.mongo.insertOne = sinon.stub();
+        reporter.push({id: 'test', serialize: function(){}});
+        reporter.mongo.insertOne.callCount.should.equal(1);
+      });
+    });
+    describe('push', function(){
+      let clock, reporter;
+      beforeEach(function(){
+        clock = sinon.useFakeTimers();
+        reporter = Reporter.create({}, {}, {});
+      });
+      afterEach(function(){
+        clock.restore();
+      });
+      it('should queue the job if mongo connection is not open', function(){
+        reporter.push({id: 'jobid'});
+        reporter.queue.length.should.equal(1);
+        reporter.queue[0].should.equal('jobid');
+      });
+      it('should remove the job from queue and retry insert on timeout', function(){
+        reporter.push({id: 'jobid', serialize: function(){ return 'serial'}});
+        mongoClient.connect.yield(null, mongo);
+        mongo.insertOne.callCount.should.equal(0);
+        clock.tick(100);
+        mongo.insertOne.callCount.should.equal(1);
+        mongo.insertOne.getCall(0).args[0].should.equal('serial');
+        reporter.queue.length.should.equal(0);
+      });
+      it('should push the job to the database immediately if connection is open', function(){
+        mongoClient.connect.yield(null, mongo);
+        reporter.push({id: 'jobid', serialize: function(){ return 'serial'}});
+        mongo.insertOne.callCount.should.equal(1);
+        mongo.insertOne.getCall(0).args[0].should.equal('serial');
+        reporter.queue.length.should.equal(0);
       });
     });
     describe('stop', function(){
@@ -172,21 +87,21 @@ describe('reporters', function(){
       afterEach(function(){
         clock.restore();
       });
-      it('should set status to STOPPING', function(){
+      it('callback if queue length is 0', function(done){
         let reporter = Reporter.dummy({});
-        reporter.status.should.equal('RUNNING');
-        reporter.stop();
-        reporter.status.should.equal('STOPPING');
+        reporter.stop(function(){
+          done();
+        });
       });
-      it('should callback once status is STOPPED', function(){
+      it('should retry with timeout if queue length is above 0', function(){
         let reporter = Reporter.dummy({});
         let cb = sinon.stub();
+        reporter.queue.push(1);
         reporter.stop(cb);
-        reporter.status.should.equal('STOPPING');
         cb.callCount.should.equal(0);
         clock.tick(100);
         cb.callCount.should.equal(0);
-        reporter.status = 'STOPPED';
+        reporter.queue = [];
         clock.tick(100);
         cb.callCount.should.equal(1);
       });
