@@ -106,7 +106,8 @@ describe('E2E flow', function(){
   });
   it('should pass through job error if the job fails', function(done){
     redka.enqueue('testing', 'fail', 'data', function(error, result){
-      error.should.equal('data');
+      error.should.be.instanceOf(Error);
+      error.message.should.equal('data');
       should.not.exist(result);
       setTimeout(function(){
         done();
