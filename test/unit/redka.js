@@ -179,8 +179,8 @@ describe('redka', function(){
       redka.jobCallbacks.waitFor.yields(null, {status: 'complete'});
       redka.enqueue('queue', 'name', 'params', function(){
         redka.jobCallbacks.waitFor.callCount.should.equal(1);
-        redka.jobCallbacks.waitFor.getCall(0).args[0].should.equal('redka_queue_callback');
-        redka.jobCallbacks.waitFor.getCall(0).args[1].should.equal('jobid');
+        redka.jobCallbacks.waitFor.getCall(0).args.length.should.equal(2);
+        redka.jobCallbacks.waitFor.getCall(0).args[0].should.equal('jobid');
         done();
       });
     });
@@ -250,6 +250,15 @@ describe('redka', function(){
       redka.removeWorker('testing', function(err){
         should.not.exist(err);
         w.stop.callCount.should.equal(1);
+        done();
+      });
+    });
+    it('should drop worker reference once worker is stopped', function(done){
+      let w = {stop: sinon.stub().yieldsAsync()};
+      redka._workers['redka_testing'] = w;
+      redka.removeWorker('testing', function(err){
+        should.not.exist(err);
+        should.not.exist(redka._workers['redka_testing']);
         done();
       });
     });

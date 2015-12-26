@@ -108,6 +108,7 @@ describe('callbacks', function(){
       beforeEach(function(){
         cb = sinon.stub();
         callbacks.callbacks['jobid'] = cb;
+        callbacks.lists.push('list');
         sinon.stub(Job, 'create');
       });
       afterEach(function(){
@@ -134,24 +135,18 @@ describe('callbacks', function(){
         cb.callCount.should.equal(1);
         cb.getCall(0).args[1].should.equal(job)
       });
+      it('should remove matched list form polling', function(){
+        let data = {}, job = {};
+        Job.create.returns(job);
+        redis.hgetall.yields(null, data);
+        callbacks.handle('list', 'jobid');
+        callbacks.lists.indexOf('list').should.equal(-1);
+      });
       it('should iterate polling', function(){
         let data = {}, job = {};
         Job.create.returns(job);
         redis.hgetall.yields(null, data);
         callbacks.handle('list', 'jobid');
-        callbacks.poll.callCount.should.equal(1);
-      });
-    });
-    describe('no callback', function(){
-      it.skip('should push id back into the list', function(){
-        callbacks.handle('list', 'id');
-        redis.hgetall.callCount.should.equal(0);
-        redis.lpush.callCount.should.equal(1);
-        redis.lpush.getCall(0).args[0].should.equal('list');
-        redis.lpush.getCall(0).args[1].should.equal('id');
-      });
-      it('should iterate polling', function(){
-        callbacks.handle('list', 'id');
         callbacks.poll.callCount.should.equal(1);
       });
     });
@@ -165,21 +160,22 @@ describe('callbacks', function(){
     });
     it('should store provided job as a callback', function(){
       let cb = function(){};
-      callbacks.waitFor('list', 'id', cb);
+      callbacks.waitFor('id', cb);
       callbacks.callbacks.id.should.equal(cb);
     });
-    it('should push requested queue to polling lists once', function(){
-      callbacks.waitFor('list', 'id', function(){});
-      callbacks.lists.should.eql(['list']);
-      callbacks.waitFor('list', 'id', function(){});
-      callbacks.lists.should.eql(['list']);
+    it('should push requested job id to polling list', function(){
+      callbacks.waitFor('id', function(){});
+      callbacks.lists.should.eql(['id_callback']);
     });
     it('should kick off polling if status is INIT', function(){
-      callbacks.status = 'INIT';
-      callbacks.waitFor('list', 'id', function(){});
-      callbacks.poll.callCount.should.equal(1);
       callbacks.status = 'OTHER';
-      callbacks.waitFor('list', 'id', function(){});
+      callbacks.waitFor('id', function(){});
+      callbacks.poll.callCount.should.equal(0);
+      callbacks.status = 'INIT';
+      callbacks.waitFor('id', function(){});
+      callbacks.poll.callCount.should.equal(1);
+      callbacks.status = 'ANOTHER';
+      callbacks.waitFor('id', function(){});
       callbacks.poll.callCount.should.equal(1);
     })
   });
