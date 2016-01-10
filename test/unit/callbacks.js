@@ -1,4 +1,5 @@
 'use strict';
+const _ = require('underscore');
 const should = require('should');
 const sinon = require('sinon');
 
@@ -12,7 +13,9 @@ describe('callbacks', function(){
     redis = {
       send_command: sinon.stub(),
       hgetall: sinon.stub(),
-      lpush: sinon.stub()
+      brpop: sinon.stub(),
+      lpush: sinon.stub(),
+      quit: sinon.stub()
     };
     sinon.stub(redisClient, 'initialize').returns(redis);
     callbacks = Callbacks.initialize();
@@ -151,7 +154,7 @@ describe('callbacks', function(){
       });
     });
   });
-  describe('waitFor', function(){
+  describe('legacyWaitFor', function(){
     beforeEach(function(){
       sinon.stub(callbacks, 'poll');
     });
@@ -160,23 +163,64 @@ describe('callbacks', function(){
     });
     it('should store provided job as a callback', function(){
       let cb = function(){};
-      callbacks.waitFor('id', cb);
+      callbacks.legacyWaitFor('id', cb);
       callbacks.callbacks.id.should.equal(cb);
     });
     it('should push requested job id to polling list', function(){
-      callbacks.waitFor('id', function(){});
+      callbacks.legacyWaitFor('id', function(){});
       callbacks.lists.should.eql(['id_callback']);
     });
     it('should kick off polling if status is INIT', function(){
       callbacks.status = 'OTHER';
-      callbacks.waitFor('id', function(){});
+      callbacks.legacyWaitFor('id', function(){});
       callbacks.poll.callCount.should.equal(0);
       callbacks.status = 'INIT';
-      callbacks.waitFor('id', function(){});
+      callbacks.legacyWaitFor('id', function(){});
       callbacks.poll.callCount.should.equal(1);
       callbacks.status = 'ANOTHER';
-      callbacks.waitFor('id', function(){});
+      callbacks.legacyWaitFor('id', function(){});
       callbacks.poll.callCount.should.equal(1);
     })
+  });
+  describe('waitFor', function(){
+    beforeEach(function(){
+      redisClient.initialize.reset();
+    });
+    it('should open new connection', function(){
+      callbacks.waitFor('id', function(){});
+      redisClient.initialize.callCount.should.equal(1);
+      callbacks.waitFor('id', function(){});
+      redisClient.initialize.callCount.should.equal(2);
+    });
+    it('should brpop provided job id', function(){
+      callbacks.waitFor('id', function(){});
+      redis.brpop.callCount.should.equal(1);
+      let args = redis.brpop.getCall(0).args;
+      args[0].should.equal('id_callback');
+      args[1].should.equal(0);
+    });
+    it('should fetch job data once brpop calls back', function(){
+      let cb = sinon.stub();
+      callbacks.waitFor('id', cb);
+      redis.brpop.yield(null);
+      redis.hgetall.callCount.should.equal(1);
+      redis.hgetall.getCall(0).args[0].should.equal('id');
+    });
+    it('should callback with job instance', function(){
+      let cb = sinon.stub();
+      callbacks.waitFor('id', cb);
+      redis.brpop.yield(null);
+      redis.hgetall.yield(null, {});
+      cb.callCount.should.equal(1);
+      _.isNull(cb.getCall(0).args[0]).should.be.ok;
+      should.exist(cb.getCall(0).args[1]);
+    });
+    it('should close connection', function(){
+      let cb = sinon.stub();
+      callbacks.waitFor('id', cb);
+      redis.brpop.yield(null);
+      redis.hgetall.yield(null, {});
+      redis.quit.callCount.should.equal(1);
+    });
   });
 });

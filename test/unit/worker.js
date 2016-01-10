@@ -715,12 +715,12 @@ module.exports = function(){
         worker.fail.restore();
       });
       it('should fail the job if no callback was matched', function(done){
-        let job = {name: 'unknown'};
+        let job = {name: 'unknown', queue: 'queue'};
         worker.work(job, function(err){
           should.not.exist(err);
           worker.fail.callCount.should.equal(1);
           worker.fail.getCall(0).args[0].should.equal(job);
-          worker.fail.getCall(0).args[1].message.should.equal('No callback registered for job');
+          worker.fail.getCall(0).args[1].message.should.equal('No callback registered for job queue unknown');
           done();
         });
       });
