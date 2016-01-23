@@ -127,7 +127,7 @@ describe('E2E flow', function(){
       }
     }), function(err, results){
       should.not.exist(err);
-      //300ms is more than enough for transactional overhead
+      //300ms is more than enough for transactional overhea
       _.last(results).should.be.lessThan(1300);
       done();
     });
