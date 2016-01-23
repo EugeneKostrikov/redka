@@ -6,6 +6,7 @@ describe('@unit', function(){
   require('./unit/reporter');
   require('./unit/job');
   require('./unit/callbacks');
+  require('./unit/parallel-worker');
 });
 
 describe('@integration', function(){

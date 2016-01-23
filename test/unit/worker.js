@@ -233,10 +233,10 @@ module.exports = function(){
         worker.status = 'INIT';
         worker.poll();
         worker.status.should.equal('POLLING');
-        worker.dequeue.yield(null);
+        worker.dequeue.yield(null, {});
         worker.status.should.equal('WORKING');
         worker.work.yield(null);
-        worker.status.should.equal('FINISHING');
+        worker.status.should.equal('WORKING');
       });
       it('should not pick up new job if the status is STOPPING', function(){
         worker.status = 'STOPPING';

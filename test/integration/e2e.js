@@ -1,5 +1,6 @@
 'use strict';
 const async = require('async');
+const _ = require('underscore');
 const should = require('should');
 const Redka = require('../../lib/redka');
 
@@ -20,8 +21,9 @@ describe('E2E flow', function(){
         collectionName: 'redka-jobs'
       }
     });
-    worker = redka.worker('testing');
+    worker = redka.worker('testing', {parallel: 10, spinup: 10});
     worker.register({
+      delay: function(data, cb) { setTimeout(cb, 1000)},
       ok: function(data, cb) {cb(null, data)},
       fail: function(data, cb) {cb(data);}
     });
@@ -112,6 +114,22 @@ describe('E2E flow', function(){
       setTimeout(function(){
         done();
       }, 100);
+    });
+  });
+  it('should correctly handle parallel option', function(done){
+    async.parallel([1,2,3,4,5,6,7,8,9,10].map(function(){
+      return function(cb){
+        let start = Date.now();
+        redka.enqueue('testing', 'delay', 'data', function(err){
+          should.not.exist(err);
+          cb(null, Date.now() - start);
+        });
+      }
+    }), function(err, results){
+      should.not.exist(err);
+      //300ms is more than enough for transactional overhead
+      _.last(results).should.be.lessThan(1300);
+      done();
     });
   });
 });
