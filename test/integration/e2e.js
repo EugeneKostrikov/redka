@@ -106,6 +106,15 @@ describe('E2E flow', function(){
       }, 100);
     });
   });
+  it('should pass parsed data to complete callback if parseable', function(done){
+    redka.enqueue('testing', 'ok', {a: {b: {c: 1}}}, function(error, result){
+      should.not.exist(error);
+      result.should.eql({a: {b: {c: 1}}});
+      setTimeout(function(){
+        done();
+      });
+    });
+  });
   it('should pass through job error if the job fails', function(done){
     redka.enqueue('testing', 'fail', 'data', function(error, result){
       error.should.be.instanceOf(Error);
