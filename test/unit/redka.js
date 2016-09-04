@@ -255,7 +255,7 @@ describe('redka', function(){
       });
     });
     it('should push completed job to reporter', function(done){
-      let job = {status: 'complete', result: 'result'};
+      const job = {status: 'complete', result: 'result'};
       redka.jobCallbacks.waitFor.yieldsAsync(null, job);
       redka.enqueue('queue', 'name', 'params', function(){
         redka.reporter.push.callCount.should.equal(1);
@@ -264,7 +264,7 @@ describe('redka', function(){
       });
     });
     it('should drain the job with destructor', function(done){
-      let job = {id: 'id', status: 'complete', result: 'result'};
+      const job = {id: 'id', status: 'complete', result: 'result'};
       redka.jobCallbacks.waitFor.yieldsAsync(null, job);
       redka.enqueue('queue', 'name', 'params', function(){
         redka.destructor.drain.callCount.should.equal(1);
@@ -290,7 +290,7 @@ describe('redka', function(){
       });
     });
     it('should callback once worker is stopped', function(done){
-      let w = {stop: sinon.stub().yieldsAsync()};
+      const w = {stop: sinon.stub().yieldsAsync()};
       redka._workers['redka_testing'] = w;
       redka.removeWorker('testing', function(err){
         should.not.exist(err);
@@ -299,7 +299,7 @@ describe('redka', function(){
       });
     });
     it('should drop worker reference once worker is stopped', function(done){
-      let w = {stop: sinon.stub().yieldsAsync()};
+      const w = {stop: sinon.stub().yieldsAsync()};
       redka._workers['redka_testing'] = w;
       redka.removeWorker('testing', function(err){
         should.not.exist(err);
@@ -321,7 +321,7 @@ describe('redka', function(){
       redka.removeWorker.restore();
     });
     it('should pass correct queue names to removeWorker', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       redka.worker('one');
       redka.worker('two');
       redka.stop(cb);
@@ -329,24 +329,24 @@ describe('redka', function(){
       redka.removeWorker.getCall(1).args[0].should.equal('two');
     });
     it('should remove all running workers', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       redka.worker('one');
       redka.worker('two');
       redka.stop(cb);
       redka.removeWorker.callCount.should.equal(2);
     });
     it('should stop reporter', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       redka.stop(cb);
       redka.reporter.stop.callCount.should.equal(1);
     });
     it('should stop delayed jobs manager', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       redka.stop(cb);
       redka.delayedJobsManager.stop.callCount.should.equal(1);
     });
     it('should wait for all components to stop', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       redka.worker('one');
       redka.worker('two');
       redka.stop(cb);

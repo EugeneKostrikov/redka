@@ -35,7 +35,7 @@ describe('E2E flow', function(){
         cb(null, Date.now());
       },
     });
-    let int = setInterval(function(){
+    const int = setInterval(function(){
       if (redka.reporter.mongo){
         clearInterval(int);
         redka.reporter.mongo.deleteMany({}, function(){

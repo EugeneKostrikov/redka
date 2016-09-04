@@ -18,7 +18,7 @@ describe('Job', function(){
   });
   it('should initialize correct new job', function(){
     mongodb.ObjectID.returns('generated id');
-    let job = Job.create('queue', 'name', 'params');
+    const job = Job.create('queue', 'name', 'params');
     job.id.should.equal('generated id');
     job.queue.should.equal('queue');
     job.name.should.equal('name');
@@ -26,7 +26,7 @@ describe('Job', function(){
     job.enqueued.toString().should.equal(new Date().toString());
   });
   it('should correctly wrap existing job', function(){
-    let source = {
+    const source = {
       id: 'stored id',
       queue: 'queue',
       name: 'name',
@@ -36,7 +36,7 @@ describe('Job', function(){
       failed: new Date().toISOString(),
       complete: new Date().toISOString()
     };
-    let job = Job.create(source);
+    const job = Job.create(source);
     job.id.should.equal('stored id');
     job.queue.should.equal('queue');
     job.name.should.equal('name');

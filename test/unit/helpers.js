@@ -1,5 +1,5 @@
 'use strict';
-var sinon = require('sinon');
+const sinon = require('sinon');
 
 function stub(y){
   return y ? sinon.stub().yields() : sinon.stub().returnsThis();
@@ -11,9 +11,9 @@ function createRedisMethods(yields){
   }, {});
 }
 exports.mockRedis = function(){
-  var multi = createRedisMethods(false);
+  const multi = createRedisMethods(false);
   multi.exec = sinon.stub().yieldsAsync();
-  var redis = createRedisMethods(true);
+  const redis = createRedisMethods(true);
   redis.multi = sinon.stub().returns(multi);
   return redis;
 };

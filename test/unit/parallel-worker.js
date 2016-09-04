@@ -108,13 +108,13 @@ describe('worker running parallel jobs', function(){
       clock.restore();
     });
     it('should send brpoplpush if no command is pending now', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       worker.dequeue(cb);
       worker.dequeue(cb);
       redis.brpoplpush.callCount.should.equal(1);
     });
     it('should retry brpoplpush after a timeout', function(){
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       worker.dequeue(cb);
       worker.dequeue(cb);
       redis.brpoplpush.callCount.should.equal(1);
@@ -126,7 +126,7 @@ describe('worker running parallel jobs', function(){
     });
     it('should clear pending state as soon as callback is fired', function(){
       worker.pendingDequeue.should.equal(false);
-      let cb = sinon.stub();
+      const cb = sinon.stub();
       worker.dequeue(cb);
       worker.dequeue(cb);
       worker.pendingDequeue.should.equal(true);

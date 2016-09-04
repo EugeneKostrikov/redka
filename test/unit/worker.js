@@ -1,18 +1,18 @@
 'use strict';
-var sinon = require('sinon');
-var should = require('should');
-var helpers = require('./helpers');
-var Job = require('../../lib/job');
+const sinon = require('sinon');
+const should = require('should');
+const helpers = require('./helpers');
+const Job = require('../../lib/job');
 
 //Stubbed
-var redisClient = require('../../lib/redis-client');
+const redisClient = require('../../lib/redis-client');
 
 //SUT
-var workerModule = require('../../lib/worker');
+const workerModule = require('../../lib/worker');
 
 module.exports = function(){
   describe('worker', function(){
-    var redis, worker, cb;
+    let redis, worker, cb;
     beforeEach(function(){
       redis = helpers.mockRedis();
       sinon.stub(redisClient, 'initialize').returns(redis);
@@ -106,7 +106,7 @@ module.exports = function(){
         });
       });
       it('should not fail single job twice', function(done){
-        var job = {id: '1234'};
+        const job = {id: '1234'};
         sinon.stub(worker, 'poll');
         redis.multi().exec.yieldsAsync(null, []);
         redis.lrange.onFirstCall().yieldsAsync(null, ['1234']);
@@ -121,7 +121,7 @@ module.exports = function(){
         });
       });
       it('should not complete single job twice', function(done){
-        var job = {id: '1234'};
+        const job = {id: '1234'};
         sinon.stub(worker, 'poll');
         redis.multi().exec.yieldsAsync(null, []);
         redis.lrange.onFirstCall().yieldsAsync(null, ['1234']);
@@ -136,7 +136,7 @@ module.exports = function(){
         });
       });
       it('should not fail and complete a job at the same time', function(done){
-        var job = {id: '1234'};
+        const job = {id: '1234'};
         sinon.stub(worker, 'poll');
         redis.multi().exec.yieldsAsync(null, []);
         redis.lrange.onFirstCall().yieldsAsync(null, ['1234']);
@@ -190,28 +190,28 @@ module.exports = function(){
         worker.work.restore();
       });
       it('should dequeue a job', function(){
-        let job = {};
+        const job = {};
         worker.dequeue.yields(null, job);
         worker.poll();
         worker.dequeue.callCount.should.equal(1);
       });
       it('should pass possible error to handleError', function(){
-        let err = {};
+        const err = {};
         worker.dequeue.yields(err);
         worker.poll();
         worker.handleError.callCount.should.equal(1);
         worker.handleError.getCall(0).args[0].should.equal(err);
       });
       it('should pass the job to work', function(){
-        let job = {};
+        const job = {};
         worker.dequeue.yields(null, job);
         worker.poll();
         worker.work.callCount.should.equal(1);
         worker.work.getCall(0).args[0].should.equal(job);
       });
       it('should fail the job if worker called back with error', function(){
-        let job = {};
-        let err = {};
+        const job = {};
+        const err = {};
         worker.dequeue.yields(null, job);
         worker.work.yields(err);
         worker.poll();
@@ -220,8 +220,8 @@ module.exports = function(){
         worker.fail.getCall(0).args[1].should.equal(err);
       });
       it('should complete the job if worker called back with no error', function(){
-        let job = {};
-        let result = {};
+        const job = {};
+        const result = {};
         worker.dequeue.yields(null, job);
         worker.work.yields(null, result);
         worker.poll();
@@ -295,7 +295,7 @@ module.exports = function(){
         worker.client.multi().exec.yieldsAsync('stop');
         worker.dequeue(function(err){
           err.should.equal('stop');
-          let m = worker.client.multi();
+          const m = worker.client.multi();
           m.hset.callCount.should.equal(1);
           m.hset.getCall(0).args[0].should.equal('id');
           m.hset.getCall(0).args[1].should.equal('dequeued');
@@ -307,7 +307,7 @@ module.exports = function(){
         worker.client.multi().exec.yieldsAsync('stop');
         worker.dequeue(function(err){
           err.should.equal('stop');
-          let m = worker.client.multi();
+          const m = worker.client.multi();
           m.hgetall.callCount.should.equal(1);
           m.hgetall.getCall(0).args[0].should.equal('id');
           done();
@@ -323,7 +323,7 @@ module.exports = function(){
       });
       it('should initialize the job', function(done){
         worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
-        let jobData = {};
+        const jobData = {};
         worker.client.multi().exec.yieldsAsync(null, ['date', jobData]);
         worker.dequeue(function(err){
           should.not.exist(err);
@@ -367,7 +367,7 @@ module.exports = function(){
         should.not.exist(worker._timeouts.id);
       });
       it('should fail the job once timeout fires', function(){
-        let job = {id: 'id'};
+        const job = {id: 'id'};
         worker.timeout(job);
         clock.tick(11);
         worker.fail.callCount.should.equal(1);
@@ -715,7 +715,7 @@ module.exports = function(){
         worker.fail.restore();
       });
       it('should fail the job if no callback was matched', function(done){
-        let job = {name: 'unknown', queue: 'queue'};
+        const job = {name: 'unknown', queue: 'queue'};
         worker.work(job, function(err){
           should.not.exist(err);
           worker.fail.callCount.should.equal(1);
@@ -741,7 +741,7 @@ module.exports = function(){
       });
       it('should error if worker callback is called twice', function(){
         cb.yields(null);
-        let callback = sinon.stub();
+        const callback = sinon.stub();
         worker.work(job, callback);
         callback.callCount.should.equal(1);
         should.not.exist(callback.getCall(0).args[0]);

@@ -23,14 +23,14 @@ describe('reporters', function(){
     });
     describe('initialization', function(){
       it('should initialize redis client', function(){
-        let opts = {};
+        const opts = {};
 
         Reporter.create(opts);
         redisClient.initialize.callCount.should.equal(1);
         redisClient.initialize.getCall(0).args[0].should.equal(opts);
       });
       it('should create mongo connection', function(){
-        let opts = {};
+        const opts = {};
         Reporter.create({}, opts);
         mongoClient.connect.callCount.should.equal(1);
         mongoClient.connect.getCall(0).args[0].should.equal(opts);
@@ -42,7 +42,7 @@ describe('reporters', function(){
         mongoClient.connect.callCount.should.equal(0);
       });
       it('should use noop function in handler', function(){
-        let reporter = Reporter.dummy({});
+        const reporter = Reporter.dummy({});
         reporter.mongo.insertOne = sinon.stub();
         reporter.push({id: 'test', serialize: function(){}});
         reporter.mongo.insertOne.callCount.should.equal(1);
@@ -88,14 +88,14 @@ describe('reporters', function(){
         clock.restore();
       });
       it('callback if queue length is 0', function(done){
-        let reporter = Reporter.dummy({});
+        const reporter = Reporter.dummy({});
         reporter.stop(function(){
           done();
         });
       });
       it('should retry with timeout if queue length is above 0', function(){
-        let reporter = Reporter.dummy({});
-        let cb = sinon.stub();
+        const reporter = Reporter.dummy({});
+        const cb = sinon.stub();
         reporter.queue.push(1);
         reporter.stop(cb);
         cb.callCount.should.equal(0);

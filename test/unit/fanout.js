@@ -1,7 +1,7 @@
 'use strict';
-var fanout = require('../../lib/fanout');
-var should = require('should');
-var sinon = require('sinon');
+const fanout = require('../../lib/fanout');
+const should = require('should');
+const sinon = require('sinon');
 
 describe('/lib/fanout', function(){
   describe('init', function(){
