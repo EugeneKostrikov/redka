@@ -16,7 +16,7 @@ module.exports = function(){
     beforeEach(function(){
       redis = helpers.mockRedis();
       sinon.stub(redisClient, 'initialize').returns(redis);
-      worker = workerModule.create('test', {}, {timeout: 10});
+      worker = workerModule.create('test', {}, {timeout: 10}, 'prefix');
       sinon.stub(worker, 'dequeue'); //TO prevent infinite loop;
       cb = sinon.stub().yieldsAsync(null);
       worker.register({testing: cb});
@@ -748,6 +748,55 @@ module.exports = function(){
         cb.yield(null);
         callback.callCount.should.equal(2);
         callback.getCall(1).args[0].message.should.match(/callback is called twice/);
+      });
+    });
+    describe('retry', function(){
+      let clock, job;
+      beforeEach(function(){
+        clock = sinon.useFakeTimers();
+        job = {
+          id: 'job-id',
+          attempt: 1
+        };
+        sinon.stub(worker, 'fail');
+      });
+      afterEach(function(){
+        clock.restore();
+        worker.fail.restore();
+      });
+      it('should set delay, update status, and increment retry count on the job', function(){
+        worker.retry(job, 100);
+        redis.multi().hmset.callCount.should.equal(1);
+        const args = redis.multi().hmset.getCall(0).args;
+        args[0].should.equal('job-id');
+        args[1].should.eql({
+          delay: 100,
+          attempt: 2,
+          status: 'retry'
+        });
+      });
+      it('should remove job from progress list', function(){
+        worker.retry(job, 100);
+        redis.multi().lrem.callCount.should.equal(1);
+        const args = redis.multi().lrem.getCall(0).args;
+        args[0].should.equal('test_progress');
+        args[1].should.equal(0);
+        args[2].should.equal('job-id');
+      });
+      it('should add job id to delay list', function(){
+        worker.retry(job, 100);
+        redis.multi().lpush.callCount.should.equal(1);
+        const args = redis.multi().lpush.getCall(0).args;
+        args[0].should.equal('prefix_global-delay');
+        args[1].should.equal('job-id');
+      });
+      it('should fail the job if errors moving the job', function(){
+        redis.multi().exec.yields('fail');
+        worker.retry(job, 100);
+        worker.fail.callCount.should.equal(1);
+        const args = worker.fail.getCall(0).args;
+        args[0].should.equal(job);
+        args[1].should.equal('fail');
       });
     });
     describe('stop', function(){

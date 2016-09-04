@@ -26,7 +26,14 @@ describe('E2E flow', function(){
       delay: function(data, cb) { setTimeout(cb, 1000)},
       ok: function(data, cb) {cb(null, data)},
       time: function(data, cb){ cb(null, Date.now())},
-      fail: function(data, cb) {cb(data);}
+      fail: function(data, cb) {cb(data);},
+      retry: function(data, cb){
+        if (this.attempt < 3) return this.retryIn(500);
+        if (data.fail) {
+          return cb(new Error('Max retries reached'));
+        }
+        cb(null, Date.now());
+      },
     });
     let int = setInterval(function(){
       if (redka.reporter.mongo){
@@ -159,6 +166,20 @@ describe('E2E flow', function(){
       should.not.exist(err);
       //100ms for transactional overhead
       new Date(end).should.be.greaterThan(execWhen);
+      done();
+    });
+  });
+  it('should be able to schedule job retry from handler', function(done){
+    const startedAt = Date.now();
+    redka.enqueue('testing', 'retry', {fail: false}, function(err, endedAt){
+      should.not.exist(err);
+      (endedAt - (startedAt + 1000)).should.be.approximately(100, 100);
+      done();
+    });
+  });
+  it('should provide the number of retries to handler (allow failing on many attempts)', function(done){
+    redka.enqueue('testing', 'retry', {fail: true}, function(err){
+      err.message.should.equal('Error: Max retries reached');
       done();
     });
   });
