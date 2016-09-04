@@ -25,6 +25,7 @@ describe('E2E flow', function(){
     worker.register({
       delay: function(data, cb) { setTimeout(cb, 1000)},
       ok: function(data, cb) {cb(null, data)},
+      time: function(data, cb){ cb(null, Date.now())},
       fail: function(data, cb) {cb(data);}
     });
     let int = setInterval(function(){
@@ -126,7 +127,7 @@ describe('E2E flow', function(){
     });
   });
   it('should correctly handle parallel option', function(done){
-    async.parallel([1,2,3,4,5,6,7,8,9,10].map(function(){
+    async.parallel(_.range(10).map(function(){
       return function(cb){
         let start = Date.now();
         redka.enqueue('testing', 'delay', 'data', function(err){
@@ -136,8 +137,28 @@ describe('E2E flow', function(){
       }
     }), function(err, results){
       should.not.exist(err);
-      //300ms is more than enough for transactional overhea
-      _.last(results).should.be.lessThan(1300);
+      //100ms is more than enough for transactional overhead
+      _.last(results).should.be.lessThan(1100);
+      done();
+    });
+  });
+  it('should be able to run delayed jobs with milliseconds delay', function(done){
+    const start = Date.now();
+    redka.enqueue('testing', 'time', 'data', {delay: 1000}, function(err, end){
+      should.not.exist(err);
+      //100ms for transactional overhead
+
+      (end - (start + 1000)).should.be.approximately(100, 100);
+      done();
+    });
+  });
+  it('should be able to run delayed job with date-like delay', function(done){
+    const execWhen = new Date(Date.now() + 1000);
+    _.isDate(execWhen).should.equal(true);
+    redka.enqueue('testing', 'time', 'data', {delay: execWhen}, function(err, end){
+      should.not.exist(err);
+      //100ms for transactional overhead
+      new Date(end).should.be.greaterThan(execWhen);
       done();
     });
   });

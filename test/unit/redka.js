@@ -11,9 +11,10 @@ const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 const Callbacks = require('../../lib/callbacks');
 const Destructor = require('../../lib/destructor');
+const DelayedJobsManager = require('../../lib/delayed-jobs-manager');
 
 describe('redka', function(){
-  let reporter, callbacks, destructor;
+  let reporter, callbacks, destructor, delayedJobsManager;
   beforeEach(function(){
     callbacks = {
       waitFor: sinon.stub()
@@ -25,16 +26,22 @@ describe('redka', function(){
     destructor = {
       drain: sinon.stub()
     };
+    delayedJobsManager = {
+      start: sinon.stub(),
+      stop: sinon.stub()
+    };
     sinon.stub(Reporter, 'create').returns(reporter);
     sinon.stub(Reporter, 'dummy').returns(reporter);
     sinon.stub(Callbacks, 'initialize').returns(callbacks);
     sinon.stub(Destructor, 'initialize').returns(destructor);
+    sinon.stub(DelayedJobsManager, 'create').returns(delayedJobsManager);
   });
   afterEach(function(){
     Reporter.create.restore();
     Reporter.dummy.restore();
     Callbacks.initialize.restore();
     Destructor.initialize.restore();
+    DelayedJobsManager.create.restore();
   });
   describe('initialization', function(){
     beforeEach(function(){
@@ -80,6 +87,19 @@ describe('redka', function(){
       redka.reporter.should.equal(reporter);
       Reporter.dummy.callCount.should.equal(1);
       Reporter.dummy.getCall(0).args[0].should.equal(opts.redis);
+    });
+    it('should start delayed jobs manager passing in correct options', function(){
+      let opts = {
+        redis: {},
+        delayOptions: {}
+      };
+      let redka = new Redka(opts);
+      redka.delayedJobsManager.should.equal(delayedJobsManager);
+      DelayedJobsManager.create.callCount.should.equal(1);
+      const args = DelayedJobsManager.create.getCall(0).args;
+      args[0].should.equal(opts.redis);
+      args[1].should.equal(opts.delayOptions);
+      delayedJobsManager.start.callCount.should.equal(1);
     });
   });
 
@@ -141,6 +161,11 @@ describe('redka', function(){
       redka.enqueue('q');
       Job.create.getCall(0).args[0].should.equal('redka_q');
     });
+    it('should throw if queue name is system-reserved', function(){
+      (function(){
+        redka.enqueue('_global-delay');
+      }).should.throw('_global-delay is redka reserved queue name');
+    });
     it('should initialize new job', function(){
       redka.enqueue('queue', 'name', 'params');
       Job.create.callCount.should.equal(1);
@@ -158,11 +183,31 @@ describe('redka', function(){
         done();
       });
     });
-    it('should push job id to pending queue', function(done){
+    it('should push job id to pending queue if delay option is not provided', function(done){
       redka.enqueue('queue', 'name', 'params', function(err){
         should.not.exist(err);
         redis.lpush.callCount.should.equal(1);
         redis.lpush.getCall(0).args[0].should.equal('redka_queue_pending');
+        redis.lpush.getCall(0).args[1].should.equal('jobid');
+        done();
+      });
+    });
+    it('should push job id to pending queue if delay option is 0', function(done){
+      job.delay = 0;
+      redka.enqueue('queue', 'name', 'params', {delay: 0}, function(err){
+        should.not.exist(err);
+        redis.lpush.callCount.should.equal(1);
+        redis.lpush.getCall(0).args[0].should.equal('redka_queue_pending');
+        redis.lpush.getCall(0).args[1].should.equal('jobid');
+        done();
+      });
+    });
+    it('should push job id to delay queue if delay option is set', function(done){
+      job.delay = 1;
+      redka.enqueue('queue', 'name', 'params', {delay: 1}, function(err){
+        should.not.exist(err);
+        redis.lpush.callCount.should.equal(1);
+        redis.lpush.getCall(0).args[0].should.equal('redka__global-delay');
         redis.lpush.getCall(0).args[1].should.equal('jobid');
         done();
       });
@@ -283,17 +328,34 @@ describe('redka', function(){
       redka.removeWorker.getCall(0).args[0].should.equal('one');
       redka.removeWorker.getCall(1).args[0].should.equal('two');
     });
-    it('should remove all running workers and the reporter', function(){
+    it('should remove all running workers', function(){
       let cb = sinon.stub();
       redka.worker('one');
       redka.worker('two');
       redka.stop(cb);
       redka.removeWorker.callCount.should.equal(2);
+    });
+    it('should stop reporter', function(){
+      let cb = sinon.stub();
+      redka.stop(cb);
       redka.reporter.stop.callCount.should.equal(1);
+    });
+    it('should stop delayed jobs manager', function(){
+      let cb = sinon.stub();
+      redka.stop(cb);
+      redka.delayedJobsManager.stop.callCount.should.equal(1);
+    });
+    it('should wait for all components to stop', function(){
+      let cb = sinon.stub();
+      redka.worker('one');
+      redka.worker('two');
+      redka.stop(cb);
       cb.callCount.should.equal(0);
-      redka.removeWorker.yield(null); //fires both workers
+      redka.removeWorker.yield(null); //Fire both workers
       cb.callCount.should.equal(0);
-      redka.reporter.stop.yield(null); //fired reporter
+      redka.reporter.stop.yield(null); //Fire reporter
+      cb.callCount.should.equal(0);
+      redka.delayedJobsManager.stop.yield(null); //Fire delay
       cb.callCount.should.equal(1);
     });
   });

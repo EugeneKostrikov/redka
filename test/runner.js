@@ -2,6 +2,7 @@
 describe('@unit', function(){
   require('./unit/fanout');
   require('./unit/worker')();
+  require('./unit/delayed-jobs-manager');
   require('./unit/redka');
   require('./unit/reporter');
   require('./unit/job');
