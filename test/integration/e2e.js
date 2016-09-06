@@ -46,7 +46,10 @@ describe('E2E flow', function(){
   });
   afterEach(function(done){
     redka.reporter.mongo.deleteMany({}, function(){
-      redka.stop(done);
+      redka.stop(function(){
+        console.log('stop callback fired');
+        done();
+      });
     });
   });
   it('should handle successful job and mark it as complete', function(done){
@@ -182,5 +185,14 @@ describe('E2E flow', function(){
       err.message.should.equal('Error: Max retries reached');
       done();
     });
+  });
+  it('should be able to stop the worker after a number of retries fired', function(done){
+    //Just adding the jobs here. The afterEach step should not get stuck
+    redka.enqueue('testing', 'retry', {fail: false});
+    redka.enqueue('testing', 'retry', {fail: false});
+    redka.enqueue('testing', 'retry', {fail: false});
+    setTimeout(function(){
+      done();
+    }, 2000); //Let it iterate couple times
   });
 });

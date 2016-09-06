@@ -10,7 +10,7 @@ const Worker = require('../../lib/worker');
 
 describe('worker running parallel jobs', function(){
   describe('polling', function() {
-    let redis, worker, cb;
+    let redis, worker, cb, clock;
     beforeEach(function () {
       redis = helpers.mockRedis();
       sinon.stub(redisClient, 'initialize').returns(redis);
@@ -27,6 +27,7 @@ describe('worker running parallel jobs', function(){
       });
 
       cb = sinon.stub();
+      clock = sinon.useFakeTimers();
     });
     afterEach(function () {
       redisClient.initialize.restore();
@@ -34,16 +35,17 @@ describe('worker running parallel jobs', function(){
       worker.dequeue.restore();
       worker.work.restore();
       worker.complete.restore();
+      clock.restore();
     });
     it('should be able to kick off job handlers in parallel', function () {
-      worker.dequeue.yields(null, {});
+      worker.dequeue.yields(null, {status: 'complete'});
       worker.register({test: cb});
       worker.poll.callCount.should.equal(3);
       worker.dequeue.callCount.should.equal(3);
       worker.work.callCount.should.equal(3);
     });
     it('should be able to limit the number of jobs running parallel', function () {
-      worker.dequeue.yields(null, {});
+      worker.dequeue.yields(null, {status: 'complete'});
       worker.register({test: cb});
       worker.poll.callCount.should.equal(3);
 
@@ -58,15 +60,16 @@ describe('worker running parallel jobs', function(){
     it('should keep correct worker status when stopped', function () {
       worker.register({test: cb});
       worker.runningCount.should.equal(0);
-      worker.dequeue.getCall(0).yield(null, {});
+      worker.dequeue.getCall(0).yield(null, {status: 'complete'});
       worker.runningCount.should.equal(1);
       worker.status.should.equal('WORKING');
 
-      worker.dequeue.getCall(1).yield(null, {});
+      worker.dequeue.getCall(1).yield(null, {status: 'complete'});
       worker.runningCount.should.equal(2);
       worker.status.should.equal('WORKING');
 
-      worker.stop();
+      const stopcb = sinon.stub();
+      worker.stop(stopcb);
       worker.status.should.equal('STOPPING');
 
       //dequeue yields no job when status is STOPPING
@@ -82,6 +85,8 @@ describe('worker running parallel jobs', function(){
       worker.runningCount.should.equal(0);
       worker.status.should.equal('STOPPED');
 
+      clock.tick(100);
+      stopcb.called.should.be.ok;
     });
   });
   describe('dequeue', function(){
@@ -102,10 +107,10 @@ describe('worker running parallel jobs', function(){
       clock = sinon.useFakeTimers();
     });
     afterEach(function(){
-      redisClient.initialize.restore();
-      Job.create.restore();
-      worker.timeout.restore();
-      clock.restore();
+      redisClient.initialize.restore && redisClient.initialize.restore();
+      Job.create.restore && Job.create.restore();
+      worker.timeout.restore && worker.timeout.restore();
+      clock.restore && clock.restore();
     });
     it('should send brpoplpush if no command is pending now', function(){
       const cb = sinon.stub();

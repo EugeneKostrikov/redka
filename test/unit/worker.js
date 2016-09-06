@@ -42,7 +42,7 @@ module.exports = function(){
       });
       it('should fail errored jobs', function(done){
         sinon.stub(worker, 'work').yieldsAsync('error');
-        sinon.stub(worker, 'dequeue').yieldsAsync(null, 'job');
+        sinon.stub(worker, 'dequeue').yieldsAsync(null, {status: 'failed'});
         redis.lrange.yieldsAsync(null, ['1234']);
         sinon.stub(worker, 'fail', function(){
           worker.fail.calledOnce.should.be.ok;
@@ -53,7 +53,7 @@ module.exports = function(){
       });
       it('should complete successful jobs', function(done){
         sinon.stub(worker, 'work').yieldsAsync(null, 'ok');
-        sinon.stub(worker, 'dequeue').yieldsAsync(null, 'job');
+        sinon.stub(worker, 'dequeue').yieldsAsync(null, {status: 'complete'});
         redis.lrange.yieldsAsync(null, ['1234']);
         sinon.stub(worker, 'complete', function(){
           worker.complete.calledOnce.should.be.ok;
@@ -181,6 +181,7 @@ module.exports = function(){
         sinon.stub(worker, 'fail');
         sinon.stub(worker, 'complete');
         sinon.stub(worker, 'work');
+        sinon.stub(worker, 'retry');
       });
       afterEach(function(){
         worker.dequeue.restore();
@@ -188,6 +189,7 @@ module.exports = function(){
         worker.fail.restore();
         worker.complete.restore();
         worker.work.restore();
+        worker.retry.restore();
       });
       it('should dequeue a job', function(){
         const job = {};
@@ -210,7 +212,7 @@ module.exports = function(){
         worker.work.getCall(0).args[0].should.equal(job);
       });
       it('should fail the job if worker called back with error', function(){
-        const job = {};
+        const job = {status: 'failed'};
         const err = {};
         worker.dequeue.yields(null, job);
         worker.work.yields(err);
@@ -220,7 +222,7 @@ module.exports = function(){
         worker.fail.getCall(0).args[1].should.equal(err);
       });
       it('should complete the job if worker called back with no error', function(){
-        const job = {};
+        const job = {status: 'complete'};
         const result = {};
         worker.dequeue.yields(null, job);
         worker.work.yields(null, result);
@@ -228,6 +230,24 @@ module.exports = function(){
         worker.complete.callCount.should.equal(1);
         worker.complete.getCall(0).args[0].should.equal(job);
         worker.complete.getCall(0).args[1].should.equal(result);
+      });
+      it('should retry the job if worker called back with retry status', function(){
+        const job = {status: 'retry'};
+        const result = {};
+        worker.dequeue.yields(null, job);
+        worker.work.yields(null, result);
+        worker.poll();
+        worker.retry.callCount.should.equal(1);
+        worker.retry.getCall(0).args[0].should.equal(job);
+      });
+      it('should fail the job if state is not expected', function(){
+        const job = {};
+        worker.dequeue.yields(null, job);
+        worker.work.yields();
+        worker.poll();
+        worker.fail.callCount.should.equal(1);
+        worker.fail.getCall(0).args[0].should.equal(job);
+        worker.fail.getCall(0).args[1].message.should.equal('Unexpected job state');
       });
       it('should correctly set statuses', function(){
         worker.status = 'INIT';
@@ -735,7 +755,15 @@ module.exports = function(){
       it('should mark the job as complete once the worker is done', function(done){
         worker.work(job, function(err){
           should.not.exist(err);
-          job.complete.should.be.ok;
+          job.status.should.equal('complete');
+          done();
+        });
+      });
+      it('should mark job as failed if error exists', function(done){
+        cb.yields('failure');
+        worker.work(job, function(err){
+          err.should.equal('failure');
+          job.status.should.equal('failed');
           done();
         });
       });
@@ -756,27 +784,34 @@ module.exports = function(){
         clock = sinon.useFakeTimers();
         job = {
           id: 'job-id',
-          attempt: 1
+          attempt: 1,
+          status: 'retry',
+          delay: 100500
         };
         sinon.stub(worker, 'fail');
+        sinon.stub(worker, 'emit');
+        sinon.stub(worker, 'clearTimeout');
+        sinon.stub(worker, 'poll');
       });
       afterEach(function(){
         clock.restore();
         worker.fail.restore();
+        worker.emit.restore();
+        worker.poll.restore();
       });
       it('should set delay, update status, and increment retry count on the job', function(){
-        worker.retry(job, 100);
+        worker.retry(job);
         redis.multi().hmset.callCount.should.equal(1);
         const args = redis.multi().hmset.getCall(0).args;
         args[0].should.equal('job-id');
         args[1].should.eql({
-          delay: 100,
+          delay: 100500,
           attempt: 2,
           status: 'retry'
         });
       });
       it('should remove job from progress list', function(){
-        worker.retry(job, 100);
+        worker.retry(job);
         redis.multi().lrem.callCount.should.equal(1);
         const args = redis.multi().lrem.getCall(0).args;
         args[0].should.equal('test_progress');
@@ -784,7 +819,7 @@ module.exports = function(){
         args[2].should.equal('job-id');
       });
       it('should add job id to delay list', function(){
-        worker.retry(job, 100);
+        worker.retry(job);
         redis.multi().lpush.callCount.should.equal(1);
         const args = redis.multi().lpush.getCall(0).args;
         args[0].should.equal('prefix_global-delay');
@@ -792,11 +827,30 @@ module.exports = function(){
       });
       it('should fail the job if errors moving the job', function(){
         redis.multi().exec.yields('fail');
-        worker.retry(job, 100);
+        worker.retry(job);
         worker.fail.callCount.should.equal(1);
         const args = worker.fail.getCall(0).args;
         args[0].should.equal(job);
         args[1].should.equal('fail');
+      });
+      it('should emit retry event', function(){
+        redis.multi().exec.yields(null);
+        worker.retry(job);
+        worker.emit.callCount.should.equal(1);
+        const args = worker.emit.getCall(0).args;
+        args[0].should.equal('retry');
+        args[1].should.equal(job);
+      });
+      it('should clear job timeout', function(){
+        redis.multi().exec.yields(null);
+        worker.retry(job);
+        worker.clearTimeout.callCount.should.equal(1);
+        worker.clearTimeout.getCall(0).args[0].should.equal(job);
+      });
+      it('should poll for next job', function(){
+        redis.multi().exec.yields(null);
+        worker.retry(job);
+        worker.poll.callCount.should.equal(1);
       });
     });
     describe('stop', function(){
