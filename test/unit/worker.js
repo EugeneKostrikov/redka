@@ -767,15 +767,14 @@ module.exports = function(){
           done();
         });
       });
-      it('should error if worker callback is called twice', function(){
+      it('should not take any actions if job callback is called second time', function(){
         cb.yields(null);
         const callback = sinon.stub();
         worker.work(job, callback);
         callback.callCount.should.equal(1);
         should.not.exist(callback.getCall(0).args[0]);
         cb.yield(null);
-        callback.callCount.should.equal(2);
-        callback.getCall(1).args[0].message.should.match(/callback is called twice/);
+        callback.callCount.should.equal(1);
       });
     });
     describe('retry', function(){
@@ -786,7 +785,8 @@ module.exports = function(){
           id: 'job-id',
           attempt: 1,
           status: 'retry',
-          delay: 100500
+          delay: 100500,
+          notes: {}
         };
         sinon.stub(worker, 'fail');
         sinon.stub(worker, 'emit');
@@ -807,7 +807,8 @@ module.exports = function(){
         args[1].should.eql({
           delay: 100500,
           attempt: 2,
-          status: 'retry'
+          status: 'retry',
+          notes: '{}'
         });
       });
       it('should remove job from progress list', function(){
