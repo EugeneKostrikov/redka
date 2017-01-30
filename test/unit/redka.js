@@ -88,9 +88,10 @@ describe('redka', function(){
       Reporter.dummy.callCount.should.equal(1);
       Reporter.dummy.getCall(0).args[0].should.equal(opts.redis);
     });
-    it('should start delayed jobs manager passing in correct options', function(){
+    it('should start delayed jobs manager passing in correct options if configured to', function(){
       let opts = {
         redis: {},
+        runDelayedJobsManager: true,
         delayOptions: {}
       };
       let redka = new Redka(opts);
@@ -100,6 +101,14 @@ describe('redka', function(){
       args[0].should.equal(opts.redis);
       args[1].should.equal(opts.delayOptions);
       delayedJobsManager.start.callCount.should.equal(1);
+    });
+    it('should not start delayed jobs manager if option is not provided explicitly', function(){
+      let opts = {
+        redis: {},
+        delayOptions: {}
+      };
+      let redka = new Redka(opts);
+      DelayedJobsManager.create.callCount.should.equal(0);
     });
   });
 
@@ -313,7 +322,7 @@ describe('redka', function(){
     beforeEach(function(){
       redis = helpers.mockRedis();
       sinon.stub(client, 'initialize').returns(redis);
-      redka = new Redka({redis: {}});
+      redka = new Redka({redis: {}, runDelayedJobsManager: true});
       sinon.stub(redka, 'removeWorker');
     });
     afterEach(function(){
