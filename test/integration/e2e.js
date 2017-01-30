@@ -14,6 +14,7 @@ describe('E2E flow', function(){
         port: process.env.REDIS_PORT_6379_TCP_PORT || 6379
       },
       enableReporting: true,
+      runDelayedJobsManager: true,
       mongodb: {
         dburl: (process.env.CI ?
         'mongodb://' + process.env.MONGO_PORT_27017_TCP_ADDR + ':' + process.env.MONGO_PORT_27017_TCP_PORT :
