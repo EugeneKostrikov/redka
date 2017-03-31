@@ -13,9 +13,11 @@ for jobid in list_iter() do
   local delay = redis.call("hget", jobid, "delay")
   if delay <= ARGV[1] then
     local targetqueue = redis.call("hget", jobid, "queue")
-    redis.call("lpush", targetqueue .. "_pending", jobid)
-    redis.call("lrem", "redka__global-delay", 0, jobid)
-    requeued = true
+    if (type(targetqueue) == 'string') then
+      redis.call("lpush", targetqueue .. "_pending", jobid)
+      redis.call("lrem", "redka__global-delay", 0, jobid)
+      requeued = true
+    end
   end
 end
 
