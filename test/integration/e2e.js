@@ -22,7 +22,7 @@ describe('E2E flow', function(){
         collectionName: 'redka-jobs'
       }
     });
-    worker = redka.worker('testing', {parallel: 10, spinup: 10});
+    worker = redka.worker('testing', {parallel: 10});
     worker.register({
       delay: function(data, cb) { setTimeout(cb, 1000)},
       ok: function(data, cb) {cb(null, data)},
@@ -183,7 +183,7 @@ describe('E2E flow', function(){
   });
   it('should provide the number of retries to handler (allow failing on many attempts)', function(done){
     redka.enqueue('testing', 'retry', {fail: true}, function(err){
-      err.message.should.equal('Error: Max retries reached');
+      err.message.should.equal('Max retries reached');
       done();
     });
   });

@@ -8,7 +8,6 @@ describe('@unit', function(){
   require('./unit/job');
   require('./unit/job-context');
   require('./unit/callbacks');
-  require('./unit/parallel-worker');
 });
 
 describe('@integration', function(){

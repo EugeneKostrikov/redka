@@ -143,13 +143,19 @@ describe('redka', function(){
       workerModule.create.getCall(0).args[1].should.equal('redis opts');
       workerModule.create.getCall(0).args[2].should.equal(wopts);
     });
+    it('should init multiple workers if parallel option provided', function(){
+      redka.worker('queue', {parallel: 5});
+      workerModule.create.callCount.should.equal(5);
+      redka._workers.redka_queue.length.should.equal(5);
+    });
     it('should keep track of created workers', function(){
       redka.worker('q');
       should.exist(redka._workers.redka_q);
-      redka._workers.redka_q.should.equal(worker);
+      redka._workers.redka_q.should.eql([worker]);
     });
-    it('should return created worker', function(){
-      redka.worker('q').should.equal(worker);
+    it('should return worker multiplex', function(){
+      const multiplex = redka.worker('q');
+      multiplex.register.should.be.a.Function();
     });
   });
   describe('enqueue', function(){
@@ -300,7 +306,7 @@ describe('redka', function(){
     });
     it('should callback once worker is stopped', function(done){
       const w = {stop: sinon.stub().yieldsAsync()};
-      redka._workers['redka_testing'] = w;
+      redka._workers['redka_testing'] = [w];
       redka.removeWorker('testing', function(err){
         should.not.exist(err);
         w.stop.callCount.should.equal(1);
@@ -309,7 +315,7 @@ describe('redka', function(){
     });
     it('should drop worker reference once worker is stopped', function(done){
       const w = {stop: sinon.stub().yieldsAsync()};
-      redka._workers['redka_testing'] = w;
+      redka._workers['redka_testing'] = [w];
       redka.removeWorker('testing', function(err){
         should.not.exist(err);
         should.not.exist(redka._workers['redka_testing']);
