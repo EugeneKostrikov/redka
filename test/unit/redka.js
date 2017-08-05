@@ -5,23 +5,22 @@ const should = require('should');
 const helpers = require('./helpers');
 
 const Redka = require('../../lib/redka');
-const Reporter = require('../../lib/reporter');
 const workerModule = require('../../lib/worker');
 const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 const Callbacks = require('../../lib/callbacks');
 const Destructor = require('../../lib/destructor');
 const DelayedJobsManager = require('../../lib/delayed-jobs-manager');
+const JobEvents = require('../../lib/job-events');
 
 describe('redka', function(){
-  let reporter, callbacks, destructor, delayedJobsManager;
+  let callbacks, destructor, delayedJobsManager, jobEventEmitter;
   beforeEach(function(){
+    jobEventEmitter = {
+      jobEnqueued: sinon.stub()
+    };
     callbacks = {
       waitFor: sinon.stub()
-    };
-    reporter = {
-      stop: sinon.stub(),
-      push: sinon.stub()
     };
     destructor = {
       drain: sinon.stub()
@@ -30,18 +29,16 @@ describe('redka', function(){
       start: sinon.stub(),
       stop: sinon.stub()
     };
-    sinon.stub(Reporter, 'create').returns(reporter);
-    sinon.stub(Reporter, 'dummy').returns(reporter);
     sinon.stub(Callbacks, 'initialize').returns(callbacks);
     sinon.stub(Destructor, 'initialize').returns(destructor);
     sinon.stub(DelayedJobsManager, 'create').returns(delayedJobsManager);
+    sinon.stub(JobEvents, 'createEmitter').returns(jobEventEmitter);
   });
   afterEach(function(){
-    Reporter.create.restore();
-    Reporter.dummy.restore();
     Callbacks.initialize.restore();
     Destructor.initialize.restore();
     DelayedJobsManager.create.restore();
+    JobEvents.createEmitter.restore();
   });
   describe('initialization', function(){
     beforeEach(function(){
@@ -64,29 +61,6 @@ describe('redka', function(){
       redka.prefix.should.equal('redka_');
       let other = new Redka({prefix: 'custom_'});
       other.prefix.should.equal('custom_');
-    });
-    it('should start mongo reporter if reporting is enabled', function(){
-      let opts  = {
-        redis: {},
-        mongodb: {},
-        enableReporting: true,
-        reportingOptions: {}
-      };
-      let redka = new Redka(opts);
-      redka.reporter.should.equal(reporter);
-      Reporter.create.callCount.should.equal(1);
-      Reporter.create.getCall(0).args[0].should.equal(opts.redis);
-      Reporter.create.getCall(0).args[1].should.equal(opts.mongodb);
-      Reporter.create.getCall(0).args[2].should.equal(opts.reportingOptions);
-    });
-    it('should start dummy reporter if reporting is disabled', function(){
-      let opts  = {
-        redis: {}
-      };
-      let redka = new Redka(opts);
-      redka.reporter.should.equal(reporter);
-      Reporter.dummy.callCount.should.equal(1);
-      Reporter.dummy.getCall(0).args[0].should.equal(opts.redis);
     });
     it('should start delayed jobs manager passing in correct options if configured to', function(){
       let opts = {
@@ -235,6 +209,13 @@ describe('redka', function(){
         done();
       });
     });
+    it('should emit job enqueued event', function(done){
+      redka.enqueue('queue', 'name', 'params', function(){
+        jobEventEmitter.jobEnqueued.callCount.should.equal(1);
+        jobEventEmitter.jobEnqueued.getCall(0).args[0].should.equal(job);
+        done();
+      });
+    });
     it('should register the callback if it was provided', function(done){
       redka.jobCallbacks.waitFor.yields(null, {status: 'complete'});
       redka.enqueue('queue', 'name', 'params', function(){
@@ -266,15 +247,6 @@ describe('redka', function(){
       redka.enqueue('queue', 'name', 'params', function(err, result){
         err.message.should.equal('Unexpected job status');
         should.not.exist(result);
-        done();
-      });
-    });
-    it('should push completed job to reporter', function(done){
-      const job = {status: 'complete', result: 'result'};
-      redka.jobCallbacks.waitFor.yieldsAsync(null, job);
-      redka.enqueue('queue', 'name', 'params', function(){
-        redka.reporter.push.callCount.should.equal(1);
-        redka.reporter.push.getCall(0).args[0].should.equal(job);
         done();
       });
     });
@@ -350,11 +322,6 @@ describe('redka', function(){
       redka.stop(cb);
       redka.removeWorker.callCount.should.equal(2);
     });
-    it('should stop reporter', function(){
-      const cb = sinon.stub();
-      redka.stop(cb);
-      redka.reporter.stop.callCount.should.equal(1);
-    });
     it('should stop delayed jobs manager', function(){
       const cb = sinon.stub();
       redka.stop(cb);
@@ -367,8 +334,6 @@ describe('redka', function(){
       redka.stop(cb);
       cb.callCount.should.equal(0);
       redka.removeWorker.yield(null); //Fire both workers
-      cb.callCount.should.equal(0);
-      redka.reporter.stop.yield(null); //Fire reporter
       cb.callCount.should.equal(0);
       redka.delayedJobsManager.stop.yield(null); //Fire delay
       cb.callCount.should.equal(1);

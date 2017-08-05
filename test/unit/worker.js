@@ -3,6 +3,7 @@ const sinon = require('sinon');
 const should = require('should');
 const helpers = require('./helpers');
 const Job = require('../../lib/job');
+const JobEvents = require('../../lib/job-events');
 
 //Stubbed
 const redisClient = require('../../lib/redis-client');
@@ -12,10 +13,17 @@ const workerModule = require('../../lib/worker');
 
 module.exports = function(){
   describe('worker', function(){
-    let redis, worker, cb;
+    let redis, worker, cb, jobEventEmitter;
     beforeEach(function(){
       redis = helpers.mockRedis();
       sinon.stub(redisClient, 'initialize').returns(redis);
+      jobEventEmitter = {
+        jobDequeued: sinon.stub(),
+        jobFailed: sinon.stub(),
+        jobComplete: sinon.stub(),
+        jobRetry: sinon.stub()
+      };
+      sinon.stub(JobEvents, 'createEmitter').returns(jobEventEmitter);
       worker = workerModule.create('test', {}, {timeout: 10}, 'prefix');
       sinon.stub(worker, 'dequeue'); //TO prevent infinite loop;
       cb = sinon.stub().yieldsAsync(null);
@@ -23,6 +31,7 @@ module.exports = function(){
     });
     afterEach(function(){
       redisClient.initialize.restore();
+      JobEvents.createEmitter.restore();
     });
     describe('plumbing', function(){
       beforeEach(function(){
@@ -333,6 +342,17 @@ module.exports = function(){
           done();
         });
       });
+      it('should emit dequeued event for current job', function(done){
+        const job = {};
+        worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
+        worker.client.multi().exec.yieldsAsync(null, ['date', {}]);
+        Job.create.returns(job);
+        worker.dequeue(function(){
+          jobEventEmitter.jobDequeued.callCount.should.equal(1);
+          jobEventEmitter.jobDequeued.getCall(0).args[0].should.equal(job);
+          done();
+        });
+      });
       it('should callback if fetch fails', function(done){
         worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
         worker.client.multi().exec.yieldsAsync('err');
@@ -514,6 +534,15 @@ module.exports = function(){
           done();
         });
       });
+      it('should emit job failed event', function(done){
+        worker.client.lrange.yieldsAsync(null, ['jobid']);
+        worker.client.multi().exec.yieldsAsync(null);
+        worker.fail(job, error, function(err){
+          jobEventEmitter.jobFailed.callCount.should.equal(1);
+          jobEventEmitter.jobFailed.getCall(0).args[0].should.equal(job);
+          done();
+        });
+      });
       it('should clear timeout on the job', function(done){
         worker.client.lrange.yieldsAsync(null, ['jobid']);
         worker.client.multi().exec.yieldsAsync(null);
@@ -611,6 +640,15 @@ module.exports = function(){
           err.should.equal('stop');
           worker.handleError.callCount.should.equal(1);
           worker.handleError.getCall(0).args[0].should.equal('stop');
+          done();
+        });
+      });
+      it('should emit job complete event', function(done){
+        worker.client.lrange.yieldsAsync(null, ['jobid']);
+        worker.client.multi().exec.yieldsAsync(null);
+        worker.complete(job, result, function() {
+          jobEventEmitter.jobComplete.callCount.should.equal(1);
+          jobEventEmitter.jobComplete.getCall(0).args[0].should.equal(job);
           done();
         });
       });
@@ -834,13 +872,11 @@ module.exports = function(){
         args[0].should.equal(job);
         args[1].should.equal('fail');
       });
-      it('should emit retry event', function(){
+      it('should emit job retry event', function(){
         redis.multi().exec.yields(null);
         worker.retry(job);
-        worker.emit.callCount.should.equal(1);
-        const args = worker.emit.getCall(0).args;
-        args[0].should.equal('retry');
-        args[1].should.equal(job);
+        jobEventEmitter.jobRetry.callCount.should.equal(1);
+        jobEventEmitter.jobRetry.getCall(0).args[0].should.equal(job);
       });
       it('should clear job timeout', function(){
         redis.multi().exec.yields(null);
