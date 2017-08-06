@@ -7,20 +7,13 @@ const Redka = require('../../lib/redka');
 describe('E2E flow', function(){
   this.timeout(200000);
   let redka, worker;
-  beforeEach(function(done){
+  beforeEach(function(){
     redka = new Redka({
       redis: {
         host: process.env.REDIS_PORT_6379_TCP_ADDR || '127.0.0.1',
         port: process.env.REDIS_PORT_6379_TCP_PORT || 6379
       },
-      enableReporting: true,
-      runDelayedJobsManager: true,
-      mongodb: {
-        dburl: (process.env.CI ?
-        'mongodb://' + process.env.MONGO_PORT_27017_TCP_ADDR + ':' + process.env.MONGO_PORT_27017_TCP_PORT :
-          'mongodb://localhost:27017') + '/redka-test',
-        collectionName: 'redka-jobs'
-      }
+      runDelayedJobsManager: true
     });
     worker = redka.worker('testing', {parallel: 10});
     worker.register({
@@ -36,26 +29,15 @@ describe('E2E flow', function(){
         cb(null, Date.now());
       },
     });
-    const int = setInterval(function(){
-      if (redka.reporter.mongo){
-        clearInterval(int);
-        redka.reporter.mongo.deleteMany({}, function(){
-          done();
-        });
-      }
-    }, 100);
   });
   afterEach(function(done){
-    redka.reporter.mongo.deleteMany({}, function(){
-      redka.stop(function(){
-        console.log('stop callback fired');
-        done();
-      });
+    redka.stop(function(){
+      done();
     });
   });
   it('should handle successful job and mark it as complete', function(done){
-    redka.enqueue('testing', 'ok', 'data');
-    setTimeout(function(){
+    redka.enqueue('testing', 'ok', 'data', function(err, results){
+      should.not.exist(err);
       async.parallel([
         function(cb){
           redka.client.lrange('redka_testing_pending', 0, -1, function(err, res){
@@ -70,20 +52,13 @@ describe('E2E flow', function(){
             res.length.should.equal(0);
             cb();
           });
-        },
-        function(cb){
-          redka.reporter.mongo.find({status: 'complete'}).toArray(function(err, res){
-            should.not.exist(err);
-            res.length.should.equal(1);
-            cb();
-          });
         }
       ], done);
-    }, 100);
+    });
   });
   it('should handle throwing jobs and mark it as failed', function(done){
-    redka.enqueue('testing', 'fail', 'data');
-    setTimeout(function(){
+    redka.enqueue('testing', 'fail', 'data', function(err){
+      should.exist(err);
       async.parallel([
         function(cb){
           redka.client.lrange('redka_testing_pending', 0, -1, function(err, res){
@@ -98,16 +73,21 @@ describe('E2E flow', function(){
             res.length.should.equal(0);
             cb();
           });
-        },
-        function(cb){
-          redka.reporter.mongo.find({status: 'failed'}).toArray(function(err, res){
-            should.not.exist(err);
-            res.length.should.equal(1);
-            cb();
-          });
         }
       ], done);
-    }, 100);
+    });
+  });
+  it('should delete the job from database when job is complete', function(done){
+    redka.enqueue('testing', 'ok', 'data', function(err){
+      should.not.exist(err);
+      setTimeout(function(){
+        redka.client.keys('*', function(err, keys){
+          should.not.exist(err);
+          keys.length.should.equal(0);
+          done();
+        });
+      }, 100);
+    });
   });
   it('should be able to callback when job is complete', function(done){
     redka.enqueue('testing', 'ok', 'data', function(error, result){

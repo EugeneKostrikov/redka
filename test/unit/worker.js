@@ -492,28 +492,6 @@ module.exports = function(){
           done();
         });
       });
-      it('should persist status to failed', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.fail(job, error, function(err){
-          should.not.exist(err);
-          worker.client.multi().hmset.callCount.should.equal(1);
-          worker.client.multi().hmset.getCall(0).args[0].should.equal('jobid');
-          worker.client.multi().hmset.getCall(0).args[1].status.should.equal('failed');
-          done();
-        });
-      });
-      it('should push the job id to failed list', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.fail(job, error, function(err){
-          should.not.exist(err);
-          worker.client.multi().lpush.callCount.should.equal(2);
-          worker.client.multi().lpush.getCall(0).args[0].should.equal('test_failed');
-          worker.client.multi().lpush.getCall(0).args[1].should.equal('jobid');
-          worker.client.multi().lpush.getCall(1).args[0].should.equal('jobid_callback');
-          worker.client.multi().lpush.getCall(1).args[1].should.equal('jobid');
-          done();
-        });
-      });
       it('should remove the job id from progress list', function(done){
         worker.client.lrange.yieldsAsync(null, ['jobid']);
         worker.fail(job, error, function(err){
@@ -521,6 +499,15 @@ module.exports = function(){
           worker.client.multi().lrem.callCount.should.equal(1);
           worker.client.multi().lrem.getCall(0).args[0].should.equal('test_progress');
           worker.client.multi().lrem.getCall(0).args[2].should.equal('jobid');
+          done();
+        });
+      });
+      it('should delete job entry', function(done){
+        worker.client.lrange.yields(null, ['jobid']);
+        worker.fail(job, error, function(err){
+          should.not.exist(err);
+          worker.client.multi().del.callCount.should.equal(1);
+          worker.client.multi().del.getCall(0).args[0].should.equal('jobid');
           done();
         });
       });
@@ -601,28 +588,6 @@ module.exports = function(){
           done();
         });
       });
-      it('should set job status to complete', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.complete(job, result, function(err){
-          should.not.exist(err);
-          worker.client.multi().hmset.callCount.should.equal(1);
-          worker.client.multi().hmset.getCall(0).args[0].should.equal('jobid');
-          worker.client.multi().hmset.getCall(0).args[1].status.should.equal('complete');
-          done();
-        });
-      });
-      it('should push job id to complete list', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.complete(job, result, function(err){
-          should.not.exist(err);
-          worker.client.multi().lpush.callCount.should.equal(2);
-          worker.client.multi().lpush.getCall(0).args[0].should.equal('test_complete');
-          worker.client.multi().lpush.getCall(0).args[1].should.equal('jobid');
-          worker.client.multi().lpush.getCall(1).args[0].should.equal('jobid_callback');
-          worker.client.multi().lpush.getCall(1).args[1].should.equal('jobid');
-          done();
-        });
-      });
       it('should remove job id from progress list', function(done){
         worker.client.lrange.yieldsAsync(null, ['jobid']);
         worker.complete(job, result, function(err){
@@ -630,6 +595,15 @@ module.exports = function(){
           worker.client.multi().lrem.callCount.should.equal(1);
           worker.client.multi().lrem.getCall(0).args[0].should.equal('test_progress');
           worker.client.multi().lrem.getCall(0).args[2].should.equal('jobid');
+          done();
+        });
+      });
+      it('should drop job entry ',function(done){
+        worker.client.lrange.yieldsAsync(null, ['jobid']);
+        worker.complete(job, result, function(err){
+          should.not.exist(err);
+          worker.client.multi().del.callCount.should.equal(1);
+          worker.client.multi().del.getCall(0).args[0].should.equal('jobid');
           done();
         });
       });
@@ -681,86 +655,6 @@ module.exports = function(){
       });
       it('should do nothing if callback is not provided', function(){
         worker.handleError('err');
-      });
-    });
-    describe('throwToBacklog@deprecated', function(){
-      let job;
-      beforeEach(function(){
-        job = {id: 'jobid'};
-        sinon.stub(worker, 'clearTimeout');
-        sinon.stub(worker, 'poll');
-        sinon.spy(worker, 'handleError');
-      });
-      afterEach(function(){
-        worker.clearTimeout.restore();
-        worker.poll.restore();
-        worker.handleError.restore();
-      })
-      it('should do nothing if the job is not in progress list', function(done){
-        worker.client.lrange.yieldsAsync(null, []);
-        worker.throwToBacklog(job, function(err){
-          should.not.exist(err);
-          worker.client.multi().lpush.callCount.should.equal(0);
-          done();
-        });
-      });
-      it('should immediately handle error if range fails', function(done){
-        worker.client.lrange.yieldsAsync('stop');
-        worker.throwToBacklog(job, function(err){
-          err.should.equal('stop');
-          worker.client.multi().lpush.callCount.should.equal(0);
-          done();
-        });
-      });
-      it('should push job id to backlog list', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.client.multi().exec.yieldsAsync(null);
-        worker.throwToBacklog(job, function(err){
-          should.not.exist(err);
-          worker.client.multi().lpush.callCount.should.equal(1);
-          worker.client.multi().lpush.getCall(0).args[0].should.equal('test_backlog');
-          worker.client.multi().lpush.getCall(0).args[1].should.equal('jobid');
-          done();
-        });
-      });
-      it('should remove job id from progress list', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.client.multi().exec.yieldsAsync(null);
-        worker.throwToBacklog(job, function(err){
-          should.not.exist(err);
-          worker.client.multi().lrem.callCount.should.equal(1);
-          worker.client.multi().lrem.getCall(0).args[0].should.equal('test_progress');
-          worker.client.multi().lrem.getCall(0).args[2].should.equal('jobid');
-          done();
-        });
-      });
-      it('should clear job timeout', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.client.multi().exec.yieldsAsync(null);
-        worker.throwToBacklog(job, function(err){
-          should.not.exist(err);
-          worker.clearTimeout.callCount.should.equal(1);
-          worker.clearTimeout.getCall(0).args[0].should.equal(job);
-          done();
-        });
-      });
-      it('should poll for new job', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.client.multi().exec.yieldsAsync(null);
-        worker.throwToBacklog(job, function(err){
-          should.not.exist(err);
-          worker.poll.callCount.should.equal(1);
-          done();
-        });
-      });
-      it('should handle possible push/rem error', function(done){
-        worker.client.lrange.yieldsAsync(null, ['jobid']);
-        worker.client.multi().exec.yieldsAsync('err');
-        worker.throwToBacklog(job, function(err){
-          err.should.equal('err');
-          worker.handleError.callCount.should.equal(1);
-          done();
-        });
       });
     });
     describe('work', function(){

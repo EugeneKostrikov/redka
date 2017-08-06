@@ -2,7 +2,7 @@
 const sinon = require('sinon');
 
 function stub(y){
-  return y ? sinon.stub().yieldsAsync() : sinon.stub().returnsThis();
+  return y ? sinon.stub().yields() : sinon.stub().returnsThis();
 }
 function createRedisMethods(yields){
   return ['hmset', 'lpush', 'hset', 'hgetall', 'lrange', 'lrem', 'brpoplpush', 'send_command', 'del', 'script', 'evalsha'].reduce(function(m, k){
@@ -12,7 +12,7 @@ function createRedisMethods(yields){
 }
 exports.mockRedis = function(){
   const multi = createRedisMethods(false);
-  multi.exec = sinon.stub().yieldsAsync();
+  multi.exec = sinon.stub().yields();
   const redis = createRedisMethods(true);
   redis.multi = sinon.stub().returns(multi);
   return redis;

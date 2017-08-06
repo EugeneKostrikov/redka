@@ -45,7 +45,10 @@ describe('job-events', function(){
     describe('emitEvent', function(){
       let event;
       beforeEach(function(){
-        event = {type: 'EVENT_TYPE'};
+        event = {
+          type: 'EVENT_TYPE',
+          job: {id: 'job-id'}
+        };
       });
       it('should publish into correct channel', function(){
         emitter.emitEvent(event);
@@ -54,7 +57,7 @@ describe('job-events', function(){
       });
       it('should send event payload as JSON string', function(){
         emitter.emitEvent(event);
-        redisClient.publish.getCall(0).args[1].should.equal('{"type":"EVENT_TYPE"}');
+        redisClient.publish.getCall(0).args[1].should.equal('{"type":"EVENT_TYPE","job":{"id":"job-id"}}');
       });
     });
     describe('publish methods', function(){

@@ -9,36 +9,36 @@ const workerModule = require('../../lib/worker');
 const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 const Callbacks = require('../../lib/callbacks');
-const Destructor = require('../../lib/destructor');
 const DelayedJobsManager = require('../../lib/delayed-jobs-manager');
 const JobEvents = require('../../lib/job-events');
 
 describe('redka', function(){
-  let callbacks, destructor, delayedJobsManager, jobEventEmitter;
+  let callbacks, delayedJobsManager, jobEventEmitter, jobEventReceiver;
   beforeEach(function(){
     jobEventEmitter = {
       jobEnqueued: sinon.stub()
     };
+    jobEventReceiver = {
+      onComplete: sinon.stub().returns(function(){}),
+      onFailed: sinon.stub().returns(function(){})
+    };
     callbacks = {
       waitFor: sinon.stub()
-    };
-    destructor = {
-      drain: sinon.stub()
     };
     delayedJobsManager = {
       start: sinon.stub(),
       stop: sinon.stub()
     };
     sinon.stub(Callbacks, 'initialize').returns(callbacks);
-    sinon.stub(Destructor, 'initialize').returns(destructor);
     sinon.stub(DelayedJobsManager, 'create').returns(delayedJobsManager);
     sinon.stub(JobEvents, 'createEmitter').returns(jobEventEmitter);
+    sinon.stub(JobEvents, 'createReceiver').returns(jobEventReceiver);
   });
   afterEach(function(){
     Callbacks.initialize.restore();
-    Destructor.initialize.restore();
     DelayedJobsManager.create.restore();
     JobEvents.createEmitter.restore();
+    JobEvents.createReceiver.restore();
   });
   describe('initialization', function(){
     beforeEach(function(){
@@ -140,7 +140,6 @@ describe('redka', function(){
       redis = helpers.mockRedis();
       sinon.stub(client, 'initialize').returns(redis);
       redka = new Redka({});
-      redka.jobCallbacks.waitFor.yields(null, {status: 'complete'});
     });
     afterEach(function(){
       Job.create.restore();
@@ -163,7 +162,7 @@ describe('redka', function(){
       Job.create.getCall(0).args[2].should.equal('params');
     });
     it('should hmset serialised job data', function(done){
-      redis.hmset.yieldsAsync('stop');
+      redis.hmset.yields('stop');
       redka.enqueue('queue', 'name', 'params', function(err){
         err.should.equal('stop');
         redis.hmset.callCount.should.equal(1);
@@ -173,8 +172,9 @@ describe('redka', function(){
       });
     });
     it('should push job id to pending queue if delay option is not provided', function(done){
+      redis.lpush.yields('stop');
       redka.enqueue('queue', 'name', 'params', function(err){
-        should.not.exist(err);
+        err.should.equal('stop');
         redis.lpush.callCount.should.equal(1);
         redis.lpush.getCall(0).args[0].should.equal('redka_queue_pending');
         redis.lpush.getCall(0).args[1].should.equal('jobid');
@@ -183,8 +183,9 @@ describe('redka', function(){
     });
     it('should push job id to pending queue if delay option is 0', function(done){
       job.delay = 0;
+      redis.lpush.yields('stop');
       redka.enqueue('queue', 'name', 'params', {delay: 0}, function(err){
-        should.not.exist(err);
+        err.should.equal('stop');
         redis.lpush.callCount.should.equal(1);
         redis.lpush.getCall(0).args[0].should.equal('redka_queue_pending');
         redis.lpush.getCall(0).args[1].should.equal('jobid');
@@ -193,8 +194,9 @@ describe('redka', function(){
     });
     it('should push job id to delay queue if delay option is set', function(done){
       job.delay = 1;
+      redis.lpush.yields('stop');
       redka.enqueue('queue', 'name', 'params', {delay: 1}, function(err){
-        should.not.exist(err);
+        err.should.equal('stop');
         redis.lpush.callCount.should.equal(1);
         redis.lpush.getCall(0).args[0].should.equal('redka__global-delay');
         redis.lpush.getCall(0).args[1].should.equal('jobid');
@@ -215,49 +217,44 @@ describe('redka', function(){
         jobEventEmitter.jobEnqueued.getCall(0).args[0].should.equal(job);
         done();
       });
+      redka.jobEventReceiver.onComplete.yield({job: {id: 'jobid'}});
     });
-    it('should register the callback if it was provided', function(done){
-      redka.jobCallbacks.waitFor.yields(null, {status: 'complete'});
-      redka.enqueue('queue', 'name', 'params', function(){
-        redka.jobCallbacks.waitFor.callCount.should.equal(1);
-        redka.jobCallbacks.waitFor.getCall(0).args.length.should.equal(2);
-        redka.jobCallbacks.waitFor.getCall(0).args[0].should.equal('jobid');
-        done();
-      });
-    });
-    it('should callback with job error when job status is failed', function(done){
-      redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'failed', error: 'err'});
+    it('should callback with job error when FAILED event is emitted for matching job', function(done){
       redka.enqueue('queue', 'name', 'params', function(err, result){
         err.should.be.instanceOf(Error);
         err.message.should.equal('err');
         should.not.exist(result);
         done();
       });
+      redka.jobEventReceiver.onFailed.yield({job: {id: 'jobid', status: 'failed', error: 'err'}});
     });
-    it('should callback with job result when job status is compete', function(done){
-      redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'complete', result: 'result'});
+    it('should callback with job result when COMPLETE event is emitted for matching job', function(done){
       redka.enqueue('queue', 'name', 'params', function(err, result){
         should.not.exist(err);
         result.should.equal('result');
         done();
       });
+      redka.jobEventReceiver.onComplete.yield({job: {id: 'jobid', result: 'result'}});
     });
-    it('should callback with unexpected state error if job status is unknown', function(done){
-      redka.jobCallbacks.waitFor.yieldsAsync(null, {status: 'unknown'});
-      redka.enqueue('queue', 'name', 'params', function(err, result){
-        err.message.should.equal('Unexpected job status');
-        should.not.exist(result);
-        done();
-      });
+    it('should ignore events for other jobs', function(){
+      const callback = sinon.stub();
+      redka.enqueue('queue', 'name', 'params', callback);
+      redka.jobEventReceiver.onComplete.yield({job: {id: 'other-job-id'}});
+      callback.callCount.should.equal(0);
+      redka.jobEventReceiver.onFailed.yield({job: {id: 'other-job-id'}});
+      callback.callCount.should.equal(0);
     });
-    it('should drain the job with destructor', function(done){
-      const job = {id: 'id', status: 'complete', result: 'result'};
-      redka.jobCallbacks.waitFor.yieldsAsync(null, job);
+    it('should unsubscribe from job events when either of events fired for matchign job', function(done){
+      const completeUnsub = sinon.stub();
+      redka.jobEventReceiver.onComplete.returns(completeUnsub);
+      const failedUnsub = sinon.stub();
+      redka.jobEventReceiver.onFailed.returns(failedUnsub);
       redka.enqueue('queue', 'name', 'params', function(){
-        redka.destructor.drain.callCount.should.equal(1);
-        redka.destructor.drain.getCall(0).args[0].should.equal(job);
+        completeUnsub.callCount.should.equal(1);
+        failedUnsub.callCount.should.equal(1);
         done();
       });
+      redka.jobEventReceiver.onComplete.yield({job: {id: 'jobid'}});
     });
   });
   describe('removeWorker', function(){
