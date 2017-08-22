@@ -53,7 +53,7 @@ module.exports = function(){
         sinon.stub(worker, 'work').yieldsAsync('error');
         sinon.stub(worker, 'dequeue').yieldsAsync(null, {status: 'failed'});
         redis.lrange.yieldsAsync(null, ['1234']);
-        sinon.stub(worker, 'fail', function(){
+        sinon.stub(worker, 'fail').callsFake(function(){
           worker.fail.calledOnce.should.be.ok;
           done();
         });
@@ -64,7 +64,7 @@ module.exports = function(){
         sinon.stub(worker, 'work').yieldsAsync(null, 'ok');
         sinon.stub(worker, 'dequeue').yieldsAsync(null, {status: 'complete'});
         redis.lrange.yieldsAsync(null, ['1234']);
-        sinon.stub(worker, 'complete', function(){
+        sinon.stub(worker, 'complete').callsFake(function(){
           worker.complete.calledOnce.should.be.ok;
           done();
         });
@@ -76,7 +76,7 @@ module.exports = function(){
         redis.brpoplpush.yieldsAsync(null, 'job');
         redis.multi().exec.yieldsAsync(null, []);
         redis.lrange.yieldsAsync(null, ['1234']);
-        sinon.stub(worker, 'fail', function(job, error){
+        sinon.stub(worker, 'fail').callsFake(function(job, error){
           error.message.should.equal('Worker timed out');
           done();
         });
@@ -169,7 +169,7 @@ module.exports = function(){
       });
       it('should extend registered callbacks', function(){
         worker.register({nextcb: function(){}});
-        worker.callbacks.should.have.keys(['testing','nextcb']);
+        worker.callbacks.should.have.keys('testing','nextcb');
       });
       it('should start polling for jobs immediately after callbacks were registered', function(){
         worker.status = 'INIT';

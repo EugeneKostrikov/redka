@@ -21,7 +21,7 @@ describe('/lib/fanout', function(){
       let args = worker.register.getCall(0).args[0];
       args.resource.should.be.a.Function;
       args.other.should.be.a.Function;
-      args.should.have.keys(['resource', 'other']);
+      args.should.have.keys('resource', 'other');
     });
     it('should register the callbacks with the worker', function(){
       let worker = {register: sinon.stub()};

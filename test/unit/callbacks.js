@@ -62,7 +62,7 @@ describe('callbacks', function(){
       callbacks.lists.push('ok');
       redis.send_command.yieldsAsync(null, null);
       callbacks.poll();
-      sinon.stub(callbacks, 'poll', function(){
+      sinon.stub(callbacks, 'poll').callsFake(function(){
         callbacks.poll.restore();
         done();
       });
@@ -184,7 +184,7 @@ describe('callbacks', function(){
   });
   describe('waitFor', function(){
     beforeEach(function(){
-      redisClient.initialize.reset();
+      redisClient.initialize.resetHistory();
     });
     it('should open new connection', function(){
       callbacks.waitFor('id', function(){});
