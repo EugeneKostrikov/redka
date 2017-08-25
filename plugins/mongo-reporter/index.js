@@ -1,5 +1,5 @@
 "use strict";
-const _ = require('underscore');
+const _ = require('lodash');
 const ObjectID = require('mongodb').ObjectID;
 const MongoClient = require('mongodb').MongoClient;
 const JobEvents = require('../../lib/job-events');
@@ -55,6 +55,19 @@ Reporter.prototype.write = function(){
   });
 };
 
+Reporter.prototype.escapeKeys = function(object){
+  if (!_.isPlainObject(object) && !_.isArray(object)) return object;
+  return _.transform(object, (memo, value, key) => {
+    const undotted = _.isString(key) ? key.replace(/\./g, '->') : key;
+    if (_.isString(undotted) && undotted.charAt(0) === '$'){
+      memo[undotted.replace(/^\$/, '_')] = _.isObject(value) ? this.escapeKeys(value) : value;
+    }else{
+      memo[undotted] = _.isObject(value) ? this.escapeKeys(value) : value;
+    }
+    return memo;
+  }, _.isArray(object) ? [] : {});
+};
+
 Reporter.prototype.addToWriteQueue = function(updateConfig){
   this.writeQueue.push(updateConfig);
 };
@@ -64,7 +77,7 @@ Reporter.prototype.handleEnqueued = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: _.pick(event.job, 'queue', 'name', 'params', 'delay', 'attempt', 'notes', 'enqueued', 'delay')
+      $set: this.escapeKeys(_.pick(event.job, 'queue', 'name', 'params', 'delay', 'attempt', 'notes', 'enqueued', 'delay'))
     }
   });
 };
@@ -74,7 +87,7 @@ Reporter.prototype.handleDequeued = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: _.pick(event.job, 'status', 'dequeued')
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'dequeued'))
     }
   });
 };
@@ -84,7 +97,7 @@ Reporter.prototype.handleRetry = function(event){
   this.addToWriteQueue({
     query: {_id : new ObjectID(event.job.id)},
     update: {
-      $set: _.pick(event.job, 'status', 'attempt', 'notes')
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'attempt', 'notes'))
     }
   });
 };
@@ -94,7 +107,7 @@ Reporter.prototype.handleComplete = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: _.pick(event.job, 'status', 'complete', 'result', 'notes')
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'complete', 'result', 'notes'))
     }
   });
 };
@@ -104,7 +117,7 @@ Reporter.prototype.handleFailed = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: _.pick(event.job, 'status', 'failed', 'error', 'stack', 'notes')
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'failed', 'error', 'stack', 'notes'))
     }
   });
 };

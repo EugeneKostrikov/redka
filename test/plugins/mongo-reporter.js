@@ -125,4 +125,28 @@ describe('mongo reporter plugin', function(){
       reporter.write.callCount.should.equal(2);
     });
   });
+  describe('escapeKeys', function(){
+    it('should replace dots with -> in object keys', function(){
+      reporter.escapeKeys({
+        'one.two.three': 1,
+        one: {'two.three': 2},
+        array: [{'one.two': 3}]
+      }).should.eql({
+        'one->two->three': 1,
+        one: {'two->three': 2},
+        array: [{'one->two': 3}]
+      });
+    });
+    it('should replace heading $ with _ ', function(){
+      reporter.escapeKeys({
+        $top: 1,
+        nested: {$key: 2},
+        array: [{$key: 3}]
+      }).should.eql({
+        _top: 1,
+        nested: {_key: 2},
+        array: [{_key: 3}]
+      });
+    });
+  });
 });
