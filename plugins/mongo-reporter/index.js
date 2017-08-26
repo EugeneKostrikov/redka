@@ -50,6 +50,7 @@ Reporter.prototype.write = function(){
 
   //handle dupes
   this.collection.update(nextUpdate.query, nextUpdate.update, {upsert: true}, err => {
+    if (err && err.code === 11000) return this.write(); //picked up by two instances. Safe to ignore
     if (err) throw err;
     this.write();
   });

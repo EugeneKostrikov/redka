@@ -124,6 +124,22 @@ describe('mongo reporter plugin', function(){
       reporter.write();
       reporter.write.callCount.should.equal(2);
     });
+    it('should ignore duplicate index errors', function(){
+      db.update.yields({code: 11000});
+      (function(){
+        reporter.writeQueue.push({});
+        reporter.write();
+      }).should.not.throw();
+      reporter.write.callCount.should.equal(2);
+    });
+    it('should throw unknown errors', function(){
+      db.update.yields(new Error('kaboom'));
+      (function(){
+        reporter.writeQueue.push({});
+        reporter.write();
+      }).should.throw('kaboom');
+      reporter.write.callCount.should.equal(1);
+    });
   });
   describe('escapeKeys', function(){
     it('should replace dots with -> in object keys', function(){
