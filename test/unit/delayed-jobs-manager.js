@@ -26,33 +26,32 @@ describe('DelayedJobsManager', function(){
     });
   });
   describe('start', function(){
-    it('should load the script to redis server', function(){
+    it('should load the scripts to redis server', function(){
       service.start();
-      client.script.callCount.should.equal(1);
+      client.script.callCount.should.equal(2);
       const args = client.script.getCall(0).args;
       args[0].should.equal('load');
       args[1].should.be.of.type('string');
     });
     it('should set interval to run the script', function(){
       service.start();
-      should.exist(service.interval);
+      service.intervals.length.should.equal(2);
     });
     it('should kick off script by id passing in current date', function(){
       service.start();
-      service.scriptId.should.equal('sha');
 
       client.evalsha.callCount.should.equal(0);
       clock.tick(100);
-      client.evalsha.callCount.should.equal(1);
-      clock.tick(100);
       client.evalsha.callCount.should.equal(2);
+      clock.tick(100);
+      client.evalsha.callCount.should.equal(4);
 
       const firstCall = client.evalsha.getCall(0).args;
       firstCall[0].should.equal('sha');
       firstCall[1].should.equal(0);
       firstCall[2].should.equal(100); //mock date
 
-      const secondCall = client.evalsha.getCall(1).args;
+      const secondCall = client.evalsha.getCall(2).args;
       secondCall[0].should.equal('sha');
       secondCall[1].should.equal(0);
       secondCall[2].should.equal(200); //mock date

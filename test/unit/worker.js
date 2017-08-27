@@ -658,12 +658,15 @@ module.exports = function(){
       });
     });
     describe('work', function(){
-      let job;
+      let job, hbUnsub;
       beforeEach(function(){
+        hbUnsub = sinon.stub();
         job = {name: 'testing', params: {}};
+        sinon.stub(worker, 'heartbeat').returns(hbUnsub);
         sinon.stub(worker, 'fail').yieldsAsync(null);
       });
       afterEach(function(){
+        worker.heartbeat.restore();
         worker.fail.restore();
       });
       it('should fail the job if no callback was matched', function(done){
@@ -673,6 +676,18 @@ module.exports = function(){
           worker.fail.callCount.should.equal(1);
           worker.fail.getCall(0).args[0].should.equal(job);
           worker.fail.getCall(0).args[1].message.should.equal('No callback registered for job queue unknown');
+          done();
+        });
+      });
+      it('should start heartbeating the job', function(){
+        worker.work(job, function(){});
+        worker.heartbeat.callCount.should.equal(1);
+        worker.heartbeat.getCall(0).args[0].should.equal(job);
+      });
+      it('should cancel heartbeats as soon as job callback is called', function(done){
+        worker.work(job, function(err){
+          should.not.exist(err);
+          hbUnsub.callCount.should.equal(1);
           done();
         });
       });
@@ -802,6 +817,32 @@ module.exports = function(){
         worker.stop(done);
         worker.status = 'STOPPED';
         clock.tick(101);
+      });
+    });
+    describe('heartbeat', function(){
+      let clock;
+      beforeEach(function(){
+        clock = sinon.useFakeTimers();
+      });
+      afterEach(function(){
+        clock.restore();
+      });
+      it('should update heartbeat key on job hash every 1000 ms', function(){
+        worker.heartbeat({id: 'job-id'});
+        clock.tick(1000);
+        redis.hset.callCount.should.equal(1);
+        redis.hset.getCall(0).args[0].should.equal('job-id');
+        redis.hset.getCall(0).args[1].should.equal('heartbeat');
+        redis.hset.getCall(0).args[2].should.equal(1000);
+        clock.tick(1000);
+        redis.hset.callCount.should.equal(2);
+        redis.hset.getCall(1).args[2].should.equal(2000);
+      });
+      it('should stop updating heartbeat when cancel function is called', function(){
+        const unsub = worker.heartbeat({id: 'job-id'});
+        unsub();
+        clock.tick(1000);
+        redis.hset.callCount.should.equal(0);
       });
     });
   });
