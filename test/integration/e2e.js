@@ -28,6 +28,12 @@ describe('E2E flow', function(){
         }
         cb(null, Date.now());
       },
+      stuck: function(data, cb){
+        if (this.attempt === 2) return cb(null, this.attempt);
+        setTimeout(() => {
+          cb(null, this.attempt);
+        }, 500); //still flush first attempt
+      }
     });
   });
   afterEach(function(done){
@@ -175,5 +181,28 @@ describe('E2E flow', function(){
     setTimeout(function(){
       done();
     }, 2000); //Let it iterate couple times
+  });
+  it('should put job back into queue when it hands in _progress queue with staled heartbeat value', function(done){
+    redka.enqueue('testing', 'stuck', {}, function(err){
+      should.not.exist(err);
+      done();
+    });
+    const staledHeartbeat = Date.now() - 30000;
+    function getJobId(callback) {
+      redka.client.lrange('redka_testing_progress', 0, -1, (err, list) => {
+        if (err) return callback(err);
+        if (list.length > 0) return callback(null, list[0]);
+        setTimeout(() => {
+          getJobId(callback);
+        }, 100);
+      });
+    }
+    getJobId((err, jobId) => {
+      should.not.exist(err);
+      should.exist(jobId);
+      redka.client.hset(jobId, 'heartbeat', staledHeartbeat, (err, writeResult) => {
+        should.not.exist(err);
+      });
+    });
   });
 });

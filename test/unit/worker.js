@@ -183,6 +183,7 @@ module.exports = function(){
       });
     });
     describe('poll', function(){
+      let cancelHeartbeat;
       beforeEach(function(){
         worker.dequeue.restore();
         sinon.stub(worker, 'dequeue');
@@ -191,6 +192,8 @@ module.exports = function(){
         sinon.stub(worker, 'complete');
         sinon.stub(worker, 'work');
         sinon.stub(worker, 'retry');
+        cancelHeartbeat = sinon.stub();
+        sinon.stub(worker, 'heartbeat').returns(cancelHeartbeat);
       });
       afterEach(function(){
         worker.dequeue.restore();
@@ -199,6 +202,7 @@ module.exports = function(){
         worker.complete.restore();
         worker.work.restore();
         worker.retry.restore();
+        worker.heartbeat.restore();
       });
       it('should dequeue a job', function(){
         const job = {};
@@ -219,6 +223,20 @@ module.exports = function(){
         worker.poll();
         worker.work.callCount.should.equal(1);
         worker.work.getCall(0).args[0].should.equal(job);
+      });
+      it('should start heartbeating the job', function(){
+        const job = {};
+        worker.dequeue.yields(null, job);
+        worker.poll();
+        worker.heartbeat.callCount.should.equal(1);
+        worker.heartbeat.getCall(0).args[0].should.equal(job);
+      });
+      it('should cancel heartbeats as soon as job callback is called', function(){
+        const job = {};
+        worker.dequeue.yields(null, job);
+        worker.work.yields(null);
+        worker.poll();
+        cancelHeartbeat.callCount.should.equal(1);
       });
       it('should fail the job if worker called back with error', function(){
         const job = {status: 'failed'};
@@ -658,15 +676,12 @@ module.exports = function(){
       });
     });
     describe('work', function(){
-      let job, hbUnsub;
+      let job;
       beforeEach(function(){
-        hbUnsub = sinon.stub();
         job = {name: 'testing', params: {}};
-        sinon.stub(worker, 'heartbeat').returns(hbUnsub);
         sinon.stub(worker, 'fail').yieldsAsync(null);
       });
       afterEach(function(){
-        worker.heartbeat.restore();
         worker.fail.restore();
       });
       it('should fail the job if no callback was matched', function(done){
@@ -676,18 +691,6 @@ module.exports = function(){
           worker.fail.callCount.should.equal(1);
           worker.fail.getCall(0).args[0].should.equal(job);
           worker.fail.getCall(0).args[1].message.should.equal('No callback registered for job queue unknown');
-          done();
-        });
-      });
-      it('should start heartbeating the job', function(){
-        worker.work(job, function(){});
-        worker.heartbeat.callCount.should.equal(1);
-        worker.heartbeat.getCall(0).args[0].should.equal(job);
-      });
-      it('should cancel heartbeats as soon as job callback is called', function(done){
-        worker.work(job, function(err){
-          should.not.exist(err);
-          hbUnsub.callCount.should.equal(1);
           done();
         });
       });
@@ -714,14 +717,15 @@ module.exports = function(){
           done();
         });
       });
-      it('should not take any actions if job callback is called second time', function(){
+      it('should mark the job as doubleCallback if worker function calls back twice', function(){
         cb.yields(null);
         const callback = sinon.stub();
         worker.work(job, callback);
         callback.callCount.should.equal(1);
         should.not.exist(callback.getCall(0).args[0]);
         cb.yield(null);
-        callback.callCount.should.equal(1);
+        callback.callCount.should.equal(2);
+        job.doubleCallback.should.equal(true);
       });
     });
     describe('retry', function(){
