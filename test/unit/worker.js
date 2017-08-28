@@ -72,15 +72,13 @@ module.exports = function(){
       });
       it('should timeout stuck jobs', function(done){
         worker.timeout.restore();
-        sinon.stub(worker, 'poll');
-        redis.brpoplpush.yieldsAsync(null, 'job');
-        redis.multi().exec.yieldsAsync(null, []);
-        redis.lrange.yieldsAsync(null, ['1234']);
+        sinon.stub(worker, 'dequeue').yields(null, 'job');
+        sinon.stub(worker, 'work');
         sinon.stub(worker, 'fail').callsFake(function(job, error){
           error.message.should.equal('Worker timed out');
           done();
         });
-        worker.dequeue(function(){});
+        worker.poll();
       });
       it('should clear timeout when the job is explicitly complete', function(done){
         worker.timeout.restore();
@@ -187,6 +185,7 @@ module.exports = function(){
       beforeEach(function(){
         worker.dequeue.restore();
         sinon.stub(worker, 'dequeue');
+        sinon.stub(worker, 'timeout');
         sinon.stub(worker, 'handleError');
         sinon.stub(worker, 'fail');
         sinon.stub(worker, 'complete');
@@ -197,6 +196,7 @@ module.exports = function(){
       });
       afterEach(function(){
         worker.dequeue.restore();
+        worker.timeout.restore();
         worker.handleError.restore();
         worker.fail.restore();
         worker.complete.restore();
@@ -230,6 +230,15 @@ module.exports = function(){
         worker.poll();
         worker.heartbeat.callCount.should.equal(1);
         worker.heartbeat.getCall(0).args[0].should.equal(job);
+      });
+      it('should set timeout on the job', function(){
+        const job = {};
+        worker.dequeue.yields(null, job);
+        worker.poll();
+        worker.timeout.callCount.should.equal(1);
+        const args = worker.timeout.getCall(0).args;
+        args[0].should.equal(job);
+        args[1].should.equal(cancelHeartbeat);
       });
       it('should cancel heartbeats as soon as job callback is called', function(){
         const job = {};
@@ -303,12 +312,10 @@ module.exports = function(){
       beforeEach(function(){
         worker.dequeue.restore();
         sinon.spy(worker, 'dequeue');
-        sinon.stub(worker, 'timeout');
         sinon.stub(Job, 'create').returns({});
       });
       afterEach(function(){
         worker.dequeue.restore();
-        worker.timeout.restore();
         Job.create.restore();
       });
       it('should set a blocking pop and push from pending list to progress list', function(done){
@@ -392,16 +399,6 @@ module.exports = function(){
           done();
         });
       });
-      it('should set timeout on the job', function(done){
-        worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
-        worker.client.multi().exec.yieldsAsync(null, ['date', {}]);
-        worker.dequeue(function(err, job){
-          should.not.exist(err);
-          worker.timeout.callCount.should.equal(1);
-          worker.timeout.getCall(0).args[0].should.equal(job);
-          done();
-        });
-      });
       it('should not try dequeueing job if status is STOPPING', function(done){
         worker.status = 'STOPPING';
         worker.dequeue(function(err, job){
@@ -412,8 +409,9 @@ module.exports = function(){
       });
     });
     describe('timeout', function(){
-      let clock;
+      let clock, stopHeartbeat;
       beforeEach(function(){
+        stopHeartbeat = sinon.stub();
         clock = sinon.useFakeTimers();
         sinon.stub(worker, 'fail');
       });
@@ -423,19 +421,26 @@ module.exports = function(){
       });
       it('should not set timeout if it is not configured for worker', function(){
         worker.to = null;
-        worker.timeout({id: 'id'});
+        worker.timeout({id: 'id'}, stopHeartbeat);
         should.not.exist(worker._timeouts.id);
       });
       it('should fail the job once timeout fires', function(){
         const job = {id: 'id'};
-        worker.timeout(job);
+        worker.timeout(job, stopHeartbeat);
         clock.tick(11);
         worker.fail.callCount.should.equal(1);
         worker.fail.getCall(0).args[0].should.equal(job);
       });
+      it('should stop heartbeating when timeout fires', function(){
+        const job = {id: 'id'};
+        worker.timeout(job, stopHeartbeat);
+        stopHeartbeat.callCount.should.equal(0);
+        clock.tick(11);
+        stopHeartbeat.callCount.should.equal(1);
+      });
       it('should keep track of timeouts in _timeouts', function(){
-        worker.timeout({id: 'one'});
-        worker.timeout({id: 'two'});
+        worker.timeout({id: 'one'}, stopHeartbeat);
+        worker.timeout({id: 'two'}, stopHeartbeat);
         should.exist(worker._timeouts.one);
         should.exist(worker._timeouts.two);
       });

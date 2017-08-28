@@ -22,18 +22,14 @@ describe('E2E flow', function(){
       time: function(data, cb){ cb(null, Date.now())},
       fail: function(data, cb) {cb(data);},
       retry: function(data, cb){
-        console.log("retry handler ", this.attempt < data.retryAttempts);
         if (this.attempt < (data.retryAttempts || 3)) {
-          console.log('retrying ');
           return setTimeout(() => {
             this.retryIn(400);
-          });
+          }, 100);
         }
         if (data.fail) {
-          console.log('failing');
           return cb(new Error('Max retries reached'));
         }
-        console.log('completing');
         cb(null, Date.now());
       },
       stuck: function(data, cb){
@@ -42,6 +38,11 @@ describe('E2E flow', function(){
           cb(null, this.attempt);
         }, 500); //still flush first attempt
       }
+    });
+
+    const instaTimeout = redka.worker('insta-timeout', {timeout: 1}); //1ms
+    instaTimeout.register({
+      test: function(data, cb){} //noop, should timeout
     });
   });
   afterEach(function(done){
@@ -264,6 +265,20 @@ describe('E2E flow', function(){
         should.not.exist(err);
         should.not.exist(val);
       });
+    });
+  });
+  it('should flush heartbeat when job times out', function(done){
+    redka.enqueue('insta-timeout', 'test', {}, err => {
+      should.exist(err);
+      //waiting for couple heartbeats to happen
+      setTimeout(function(){
+        redka.client.keys('*', function(err ,keys){
+          should.not.exist(err);
+
+          keys.length.should.equal(0);
+          done();
+        });
+      }, 2000);
     });
   });
 });
