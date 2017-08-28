@@ -33,28 +33,24 @@ describe('DelayedJobsManager', function(){
       args[0].should.equal('load');
       args[1].should.be.of.type('string');
     });
-    it('should set interval to run the script', function(){
-      service.start();
-      service.intervals.length.should.equal(2);
-    });
     it('should kick off script by id passing in current date', function(){
       service.start();
 
-      client.evalsha.callCount.should.equal(0);
-      clock.tick(100);
       client.evalsha.callCount.should.equal(2);
       clock.tick(100);
       client.evalsha.callCount.should.equal(4);
+      clock.tick(100);
+      client.evalsha.callCount.should.equal(6);
 
       const firstCall = client.evalsha.getCall(0).args;
       firstCall[0].should.equal('sha');
       firstCall[1].should.equal(0);
-      firstCall[2].should.equal(100); //mock date
+      firstCall[2].should.equal(0); //mock date
 
       const secondCall = client.evalsha.getCall(2).args;
       secondCall[0].should.equal('sha');
       secondCall[1].should.equal(0);
-      secondCall[2].should.equal(200); //mock date
+      secondCall[2].should.equal(100); //mock date
     });
   });
   describe('stop', function(){
@@ -64,7 +60,9 @@ describe('DelayedJobsManager', function(){
     it('should clear the interval', function(done){
       service.stop(function(){
         clock.tick(200);
-        client.evalsha.callCount.should.equal(0);
+        client.evalsha.callCount.should.equal(2);
+        clock.tick(200);
+        client.evalsha.callCount.should.equal(2);
         done();
       });
     });

@@ -22,10 +22,18 @@ describe('E2E flow', function(){
       time: function(data, cb){ cb(null, Date.now())},
       fail: function(data, cb) {cb(data);},
       retry: function(data, cb){
-        if (this.attempt < 3) return this.retryIn(500);
+        console.log("retry handler ", this.attempt < data.retryAttempts);
+        if (this.attempt < (data.retryAttempts || 3)) {
+          console.log('retrying ');
+          return setTimeout(() => {
+            this.retryIn(400);
+          });
+        }
         if (data.fail) {
+          console.log('failing');
           return cb(new Error('Max retries reached'));
         }
+        console.log('completing');
         cb(null, Date.now());
       },
       stuck: function(data, cb){
@@ -202,6 +210,59 @@ describe('E2E flow', function(){
       should.exist(jobId);
       redka.client.hset(jobId, 'heartbeat', staledHeartbeat, (err, writeResult) => {
         should.not.exist(err);
+      });
+    });
+  });
+  it('should not misbehave for job retrying longer than it is required to consider handler dead', function(done){
+    redka.enqueue('testing', 'retry', {retryAttempts: 20}, function(err){
+      should.not.exist(err);
+      redka.client.keys('*', function(err, keys){
+        should.not.exist(err);
+        keys.length.should.equal(0);
+        done();
+      });
+    });
+    redka.jobEventReceiver.onDequeued(function(msg){
+      redka.client.hget(msg.job.id, 'heartbeat', function(err, hb){
+        should.not.exist(err);
+        hb.should.be.approximately(Date.now(), 100);
+      });
+    });
+    redka.jobEventReceiver.onRetry(function(msg){
+       redka.client.hget(msg.job.id, 'heartbeat', function(err, hb){
+        should.not.exist(err);
+        hb.should.equal('');
+      });
+    });
+  });
+  it('should not misbehave if job is delayed until worker is considired dead', function(done){
+    const eventCounters = {
+      ENQUEUED: 0,
+      DEQUEUED: 0,
+      COMPLETE: 0
+    };
+
+    Object.keys(eventCounters).forEach(function(key) {
+      redka.jobEventReceiver.subscribeTo(key, () => eventCounters[key]++);
+    });
+
+    redka.enqueue('testing', 'ok', {}, {delay: 20000}, err => {
+      should.not.exist(err);
+      redka.client.keys('*', function(err, keys) {
+        should.not.exist(err);
+        keys.length.should.equal(0);
+        Object.keys(eventCounters).forEach(function(key){
+          eventCounters[key].should.equal(1);
+        });
+        done();
+      });
+    });
+    redka.client.keys('*', function(err, keys) {
+      should.not.exist(err);
+      const id = keys.find(key => /[0-9a-f]{24}/.test(key));
+      redka.client.hget(id, 'heartbeat', function(err, val){
+        should.not.exist(err);
+        should.not.exist(val);
       });
     });
   });

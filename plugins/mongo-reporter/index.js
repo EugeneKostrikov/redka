@@ -78,7 +78,7 @@ Reporter.prototype.handleEnqueued = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: this.escapeKeys(_.pick(event.job, 'queue', 'name', 'params', 'delay', 'attempt', 'notes', 'enqueued', 'delay'))
+      $set: this.escapeKeys(_.pick(event.job, 'queue', 'name', 'params', 'delay', 'attempt', 'notes', 'enqueued', 'delay', 'wasOnceStuck'))
     }
   });
 };
@@ -88,7 +88,7 @@ Reporter.prototype.handleDequeued = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: this.escapeKeys(_.pick(event.job, 'status', 'dequeued'))
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'dequeued', 'wasOnceStuck'))
     }
   });
 };
@@ -98,7 +98,7 @@ Reporter.prototype.handleRetry = function(event){
   this.addToWriteQueue({
     query: {_id : new ObjectID(event.job.id)},
     update: {
-      $set: this.escapeKeys(_.pick(event.job, 'status', 'attempt', 'notes'))
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'attempt', 'notes', 'wasOnceStuck'))
     }
   });
 };
@@ -108,7 +108,7 @@ Reporter.prototype.handleComplete = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: this.escapeKeys(_.pick(event.job, 'status', 'complete', 'result', 'notes'))
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'complete', 'result', 'notes', 'wasOnceStuck'))
     }
   });
 };
@@ -118,7 +118,7 @@ Reporter.prototype.handleFailed = function(event){
   this.addToWriteQueue({
     query: {_id: new ObjectID(event.job.id)},
     update: {
-      $set: this.escapeKeys(_.pick(event.job, 'status', 'failed', 'error', 'stack', 'notes'))
+      $set: this.escapeKeys(_.pick(event.job, 'status', 'failed', 'error', 'stack', 'notes', 'wasOnceStuck'))
     }
   });
 };

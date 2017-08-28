@@ -337,15 +337,17 @@ module.exports = function(){
           done();
         });
       });
-      it('should set dequeue date on the job', function(done){
+      it('should set dequeue date on the job and touch heartbeat', function(done){
         worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
         worker.client.multi().exec.yieldsAsync('stop');
         worker.dequeue(function(err){
           err.should.equal('stop');
           const m = worker.client.multi();
-          m.hset.callCount.should.equal(1);
+          m.hset.callCount.should.equal(2);
           m.hset.getCall(0).args[0].should.equal('id');
           m.hset.getCall(0).args[1].should.equal('dequeued');
+          m.hset.getCall(1).args[0].should.equal('id');
+          m.hset.getCall(1).args[1].should.equal('heartbeat');
           done();
         });
       });
@@ -382,7 +384,7 @@ module.exports = function(){
       it('should initialize the job', function(done){
         worker.pollingClient.brpoplpush.yieldsAsync(null, 'id');
         const jobData = {};
-        worker.client.multi().exec.yieldsAsync(null, ['date', jobData]);
+        worker.client.multi().exec.yieldsAsync(null, ['date', 0, jobData]);
         worker.dequeue(function(err){
           should.not.exist(err);
           Job.create.callCount.should.equal(1);
@@ -759,7 +761,8 @@ module.exports = function(){
           delay: 100500,
           attempt: 2,
           status: 'retry',
-          notes: '{}'
+          notes: '{}',
+          heartbeat: ''
         });
       });
       it('should remove job from progress list', function(){

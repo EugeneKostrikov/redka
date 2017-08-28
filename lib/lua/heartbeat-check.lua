@@ -25,7 +25,10 @@ end
 
 local function check_heartbeat(jobid)
     local lastHeartbeat = tonumber(redis.call('hget', jobid, 'heartbeat'))
+    if (lastHeartbeat == nil or lastHeartbeat == '') then return false end
+
     if lastHeartbeat <= cutoff then
+        redis.call('hset', jobid, 'wasOnceStuck', cutoff)
         local targetqueue = redis.call('hget', jobid, 'queue')
         if (type(targetqueue) == 'string') then
             redis.call('lpush', targetqueue .. '_pending', jobid)
