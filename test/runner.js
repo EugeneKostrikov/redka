@@ -8,6 +8,7 @@ describe('@unit', function(){
   require('./unit/job-context');
   require('./unit/callbacks');
   require('./unit/job-events');
+  require('./unit/batch-processor');
 
   require('./plugins/mongo-reporter');
 });

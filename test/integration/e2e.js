@@ -6,7 +6,7 @@ const Redka = require('../../lib/redka');
 
 describe('E2E flow', function(){
   this.timeout(200000);
-  let redka, worker;
+  let redka, worker, batchWorker;
   beforeEach(function(){
     redka = new Redka({
       redis: {
@@ -43,6 +43,21 @@ describe('E2E flow', function(){
     const instaTimeout = redka.worker('insta-timeout', {timeout: 1}); //1ms
     instaTimeout.register({
       test: function(data, cb){} //noop, should timeout
+    });
+
+    redka.batch({
+      sourceQueue: 'batch-source',
+      sourceName: 'metrics',
+      targetQueue: 'batch-target',
+      targetName: 'metrics-batch',
+      batchInterval: 2000,
+      batchSize: 2
+    });
+    batchWorker = redka.worker('batch-target');
+    batchWorker.register({
+      'metrics-batch': function(data, cb){
+        cb(null, data);
+      }
     });
   });
   afterEach(function(done){
@@ -98,7 +113,10 @@ describe('E2E flow', function(){
       setTimeout(function(){
         redka.client.keys('*', function(err, keys){
           should.not.exist(err);
-          keys.length.should.equal(0);
+
+          keys.filter(key => key !== 'redka__batcher')
+            .length.should.equal(0);
+
           done();
         });
       }, 100);
@@ -219,20 +237,23 @@ describe('E2E flow', function(){
       should.not.exist(err);
       redka.client.keys('*', function(err, keys){
         should.not.exist(err);
-        keys.length.should.equal(0);
+        keys.filter(key => key !== 'redka__batcher')
+          .length.should.equal(0);
         done();
       });
     });
-    redka.jobEventReceiver.onDequeued(function(msg){
+    const unsubDequeued = redka.jobEventReceiver.onDequeued(function(msg){
       redka.client.hget(msg.job.id, 'heartbeat', function(err, hb){
         should.not.exist(err);
         hb.should.be.approximately(Date.now(), 100);
+        unsubDequeued();
       });
     });
-    redka.jobEventReceiver.onRetry(function(msg){
+    const unsubRetry = redka.jobEventReceiver.onRetry(function(msg){
        redka.client.hget(msg.job.id, 'heartbeat', function(err, hb){
         should.not.exist(err);
         hb.should.equal('');
+        unsubRetry();
       });
     });
   });
@@ -251,7 +272,8 @@ describe('E2E flow', function(){
       should.not.exist(err);
       redka.client.keys('*', function(err, keys) {
         should.not.exist(err);
-        keys.length.should.equal(0);
+        keys.filter(key => key !== 'redka__batcher')
+          .length.should.equal(0);
         Object.keys(eventCounters).forEach(function(key){
           eventCounters[key].should.equal(1);
         });
@@ -275,10 +297,40 @@ describe('E2E flow', function(){
         redka.client.keys('*', function(err ,keys){
           should.not.exist(err);
 
-          keys.length.should.equal(0);
+          keys.filter(key => key !== 'redka__batcher')
+            .length.should.equal(0);
           done();
         });
       }, 2000);
     });
+  });
+  it('should correctly handle batch jobs', function(done){
+    let callbackCount = 0;
+    redka.jobEventReceiver.subscribeTo('COMPLETE', (data) => {
+      callbackCount++;
+      switch (callbackCount){
+        case 1:
+          data.job.params.should.eql({a: 1});
+          data.job.name.should.equal('metrics');
+          break;
+        case 2:
+          data.job.params.should.eql({a: 2});
+          data.job.name.should.equal('metrics');
+          break;
+        case 3:
+          data.job.params.should.eql([
+            {a: 1},
+            {a: 2}
+          ]);
+          data.job.name.should.equal('metrics-batch');
+          done();
+          break;
+        default:
+          done(new Error('Unexpected callback count'));
+      }
+    });
+    redka.enqueue('batch-source', 'metrics', {a: 1});
+    redka.enqueue('batch-source', 'metrics', {a: 2});
+
   });
 });

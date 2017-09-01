@@ -10,11 +10,15 @@ const Job = require('../../lib/job');
 const client = require('../../lib/redis-client');
 const Callbacks = require('../../lib/callbacks');
 const DelayedJobsManager = require('../../lib/delayed-jobs-manager');
+const BatchProcessor = require('../../lib/batch-processor');
 const JobEvents = require('../../lib/job-events');
 
 describe('redka', function(){
-  let callbacks, delayedJobsManager, jobEventEmitter, jobEventReceiver;
+  let callbacks, delayedJobsManager, batchProcessor, jobEventEmitter, jobEventReceiver;
   beforeEach(function(){
+    batchProcessor = {
+      start: sinon.stub()
+    };
     jobEventEmitter = {
       jobEnqueued: sinon.stub()
     };
@@ -31,12 +35,14 @@ describe('redka', function(){
     };
     sinon.stub(Callbacks, 'initialize').returns(callbacks);
     sinon.stub(DelayedJobsManager, 'create').returns(delayedJobsManager);
+    sinon.stub(BatchProcessor, 'makeBatcher').returns(batchProcessor);
     sinon.stub(JobEvents, 'createEmitter').returns(jobEventEmitter);
     sinon.stub(JobEvents, 'createReceiver').returns(jobEventReceiver);
   });
   afterEach(function(){
     Callbacks.initialize.restore();
     DelayedJobsManager.create.restore();
+    BatchProcessor.makeBatcher.restore();
     JobEvents.createEmitter.restore();
     JobEvents.createReceiver.restore();
   });
@@ -83,6 +89,16 @@ describe('redka', function(){
       };
       let redka = new Redka(opts);
       DelayedJobsManager.create.callCount.should.equal(0);
+    });
+    it('should create and start batch processor', function(){
+      const opts = {
+        redis: {}
+      };
+      const redka = new Redka(opts);
+      BatchProcessor.makeBatcher.callCount.should.equal(1);
+      BatchProcessor.makeBatcher.getCall(0).args[0].should.equal(opts.redis);
+      redka.batchProcessor.should.equal(batchProcessor);
+      batchProcessor.start.callCount.should.equal(1);
     });
   });
 
