@@ -12,13 +12,13 @@
   "author": "Eugene Kostrikov <eugene.kostrikov@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "async": "2.5.0",
-    "debug": "3.0.0",
+    "async": "2.6.2",
+    "debug": "4.1.1",
     "hiredis": "0.5.0",
-    "lodash": "4.17.4",
-    "mongodb": "2.2.31",
+    "lodash": "4.17.11",
+    "mongodb": "3.2.2",
     "redis": "2.8.0",
-    "underscore": "1.8.3"
+    "underscore": "1.9.1"
   },
   "devDependencies": {
     "mocha": "3.5.0",
